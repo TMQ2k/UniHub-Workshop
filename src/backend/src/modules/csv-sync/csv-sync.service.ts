@@ -24,12 +24,12 @@ export class CsvSyncService {
   ) {}
 
   // ──────────────────────────────────────────────────────────
-  // Cron: 2:00 AM daily
+  // Cron: every 15 minutes
   // ──────────────────────────────────────────────────────────
 
-  @Cron('0 2 * * *')
+  @Cron('*/15 * * * *')
   async handleCron(): Promise<void> {
-    this.logger.log('⏰ CSV Sync cron triggered at 2:00 AM');
+    this.logger.log('⏰ CSV Sync cron triggered (every 15 min)');
     await this.scanAndEnqueue();
   }
 

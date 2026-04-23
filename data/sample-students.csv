@@ -1,3 +1,10 @@
-﻿student_id,full_name,email,faculty,enrollment_year
+student_id,full_name,email,faculty,enrollment_year
 SV002,Pham Thi C,phamthic@unihub.edu.vn,Kinh te,2024
 SV003,Hoang Van D,hoangvand@unihub.edu.vn,Cong nghe Thong tin,2023
+SV004,Nguyen Van E,nguyenvane@unihub.edu.vn,Cong nghe Thong tin,2024
+SV005,Tran Thi F,tranthif@unihub.edu.vn,Y khoa,2023
+SV006,Le Van G,levang@unihub.edu.vn,Kinh te,2025
+SV007,Vo Thi H,vothih@unihub.edu.vn,Cong nghe Thong tin,2024
+SV008,Bui Van I,buivani@unihub.edu.vn,Luat,2023
+SV009,Dang Thi K,dangthik@unihub.edu.vn,Ngoai ngu,2024
+SV010,Ngo Van L,ngovanl@unihub.edu.vn,Cong nghe Thong tin,2025
