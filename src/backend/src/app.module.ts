@@ -2,9 +2,12 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
-import { RedisModule } from './common/redis';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { RedisModule } from './common/redis/index.js';
+import { AppController } from './app.controller.js';
+import { AppService } from './app.service.js';
+import { AuthModule } from './modules/auth/auth.module.js';
+import { NotificationModule } from './modules/notification/notification.module.js';
+import { CsvSyncModule } from './modules/csv-sync/csv-sync.module.js';
 
 @Module({
   imports: [
@@ -46,6 +49,11 @@ import { AppService } from './app.service';
 
     // ─── Redis Client (ioredis) ──────────────────────────
     RedisModule,
+
+    // ─── Feature Modules ─────────────────────────────────
+    AuthModule,
+    NotificationModule,
+    CsvSyncModule,
   ],
   controllers: [AppController],
   providers: [AppService],
