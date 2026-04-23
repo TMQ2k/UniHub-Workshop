@@ -9,10 +9,10 @@ import { Registration, RegistrationStatus } from '../registration/entities/regis
 import { SyncCheckInItemDto } from './dto/index.js';
 
 /** Result status for each item in a batch sync */
-type SyncResultStatus = 'synced' | 'failed';
+export type SyncResultStatus = 'synced' | 'failed';
 
 /** Result for a single check-in sync attempt */
-interface SyncItemResult {
+export interface SyncItemResult {
   registrationId: string;
   status: SyncResultStatus;
   reason?: string;

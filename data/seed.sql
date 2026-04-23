@@ -159,7 +159,7 @@ VALUES
         'ADMIN001',
         'Nguyen Van Admin',
         'admin@unihub.edu.vn',
-        '$2b$10$8KzaNdKIMyOkASCak1p1AOJopCmXD1MUsG9M/KTU.RWEKmhCJCLiy',
+        '$2b$10$mJq/00Jb.s6.Fz7vQuSilOn4atG6fnws41EscfC8DQ91JKWQazcla',
         'ORGANIZER',
         'Ban Tổ Chức'
     ),
@@ -168,7 +168,7 @@ VALUES
         'STAFF001',
         'Tran Thi Staff',
         'staff@unihub.edu.vn',
-        '$2b$10$8KzaNdKIMyOkASCak1p1AOJopCmXD1MUsG9M/KTU.RWEKmhCJCLiy',
+        '$2b$10$mJq/00Jb.s6.Fz7vQuSilOn4atG6fnws41EscfC8DQ91JKWQazcla',
         'CHECKIN_STAFF',
         'Ban Tổ Chức'
     ),
@@ -177,7 +177,7 @@ VALUES
         'SV001',
         'Le Van Sinh Vien',
         'sinhvien@unihub.edu.vn',
-        '$2b$10$8KzaNdKIMyOkASCak1p1AOJopCmXD1MUsG9M/KTU.RWEKmhCJCLiy',
+        '$2b$10$mJq/00Jb.s6.Fz7vQuSilOn4atG6fnws41EscfC8DQ91JKWQazcla',
         'STUDENT',
         'Công nghệ Thông tin'
     )
