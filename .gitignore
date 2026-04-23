@@ -3,5 +3,8 @@
 node_modules
 .next
 .env
+!.env.example
 .db
 .claude
+dist
+uploads
