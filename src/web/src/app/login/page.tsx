@@ -66,6 +66,9 @@ export default function LoginPage() {
                 className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white placeholder-gray-500 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 placeholder="VD: SV001"
               />
+              <p className="mt-1 text-xs text-gray-500">
+                Mã số sinh viên được cấp từ hệ thống trường
+              </p>
             </div>
 
             <div>
@@ -79,8 +82,11 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white placeholder-gray-500 outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                placeholder="••••••••"
+                placeholder="VD: SV001@unihub"
               />
+              <p className="mt-1 text-xs text-gray-500">
+                Mật khẩu mặc định: <code className="rounded bg-gray-800 px-1 text-indigo-400">MSSV@unihub</code> (VD: SV001@unihub)
+              </p>
             </div>
 
             <button
@@ -92,14 +98,17 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="mt-5 text-center text-sm text-gray-500">
-            Chưa có tài khoản?{' '}
-            <a href="/register" className="text-indigo-400 hover:text-indigo-300">
-              Đăng ký tại đây
-            </a>
-          </p>
-          <p className="mt-2 text-center text-xs text-gray-600">
-            Test: <code className="text-gray-500">ADMIN001</code> / <code className="text-gray-500">Admin@123</code>
+          {/* Info note */}
+          <div className="mt-5 rounded-lg border border-indigo-500/20 bg-indigo-500/5 px-4 py-3">
+            <p className="text-xs leading-relaxed text-gray-400">
+              <span className="font-semibold text-indigo-400">ℹ️ Lưu ý:</span> Tài khoản sinh viên được đồng bộ
+              tự động từ hệ thống quản lý đào tạo. Nếu bạn chưa có tài khoản, vui lòng liên hệ
+              phòng đào tạo để được hỗ trợ.
+            </p>
+          </div>
+
+          <p className="mt-3 text-center text-xs text-gray-600">
+            Admin: <code className="text-gray-500">ADMIN001</code> / <code className="text-gray-500">Admin@123</code>
           </p>
         </div>
       </div>

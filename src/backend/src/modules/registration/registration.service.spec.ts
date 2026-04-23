@@ -6,10 +6,12 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { RegistrationService } from './registration.service.js';
 import { Registration, RegistrationStatus } from './entities/registration.entity.js';
 import { Workshop, WorkshopStatus } from '../workshop/entities/workshop.entity.js';
+import { User, UserRole } from '../auth/entities/user.entity.js';
 import { NotificationService } from '../notification/notification.service.js';
 
 describe('RegistrationService', () => {
@@ -19,6 +21,24 @@ describe('RegistrationService', () => {
   let dataSource: jest.Mocked<DataSource>;
   let notificationService: jest.Mocked<NotificationService>;
   let configService: jest.Mocked<ConfigService>;
+  let userRepo: jest.Mocked<Repository<User>>;
+
+  /** Mock synced student — isSynced = true by default */
+  const mockStudent: User = {
+    id: 'student-1',
+    studentId: 'SV001',
+    fullName: 'Test Student',
+    email: 'test@test.com',
+    passwordHash: 'hash',
+    role: UserRole.STUDENT,
+    faculty: null,
+    enrollmentYear: null,
+    isLocked: false,
+    isSynced: true,
+    refreshTokenHash: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
 
   const mockWorkshop: Workshop = {
     id: 'workshop-1',
@@ -121,6 +141,12 @@ describe('RegistrationService', () => {
           },
         },
         {
+          provide: getRepositoryToken(User),
+          useValue: {
+            findOne: jest.fn().mockResolvedValue(mockStudent),
+          },
+        },
+        {
           provide: DataSource,
           useValue: {
             transaction: jest.fn(),
@@ -144,6 +170,7 @@ describe('RegistrationService', () => {
     service = module.get<RegistrationService>(RegistrationService);
     registrationRepo = module.get(getRepositoryToken(Registration));
     workshopRepo = module.get(getRepositoryToken(Workshop));
+    userRepo = module.get(getRepositoryToken(User));
     dataSource = module.get(DataSource);
     configService = module.get(ConfigService);
     notificationService = module.get(NotificationService);
@@ -170,6 +197,35 @@ describe('RegistrationService', () => {
 
       // Verify registration was created with CONFIRMED status
       expect(result.status).toBe(RegistrationStatus.CONFIRMED);
+    });
+
+    it('should throw STUDENT_NOT_VERIFIED when student is not synced from school data', async () => {
+      // Override userRepo to return a non-synced student
+      userRepo.findOne = jest.fn().mockResolvedValue({ ...mockStudent, isSynced: false });
+
+      await expect(
+        service.reserveSeat('workshop-1', 'student-1', 'test@test.com'),
+      ).rejects.toThrow(ForbiddenException);
+
+      try {
+        await service.reserveSeat('workshop-1', 'student-1', 'test@test.com');
+      } catch (e: any) {
+        expect(e.response.error.code).toBe('STUDENT_NOT_VERIFIED');
+      }
+
+      // Restore default mock for other tests
+      userRepo.findOne = jest.fn().mockResolvedValue(mockStudent);
+    });
+
+    it('should throw STUDENT_NOT_VERIFIED when student does not exist in DB', async () => {
+      userRepo.findOne = jest.fn().mockResolvedValue(null);
+
+      await expect(
+        service.reserveSeat('workshop-1', 'unknown-id', 'test@test.com'),
+      ).rejects.toThrow(ForbiddenException);
+
+      // Restore default mock
+      userRepo.findOne = jest.fn().mockResolvedValue(mockStudent);
     });
 
     it('should set PENDING_PAYMENT for paid workshop with seat hold', async () => {

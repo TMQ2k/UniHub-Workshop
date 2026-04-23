@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
     faculty         VARCHAR(255),
     enrollment_year INT,
     is_locked       BOOLEAN NOT NULL DEFAULT FALSE,
+    is_synced       BOOLEAN NOT NULL DEFAULT FALSE,
     refresh_token_hash VARCHAR(255),
     created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
@@ -149,10 +150,12 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id,
 
 -- ============================================================
 -- SEED DATA — Admin/Organizer users
--- Password: "Admin@123" (bcrypt hash)
+-- Admin/Staff password: "Admin@123" (bcrypt hash)
+-- Student password convention: {MSSV}@unihub (e.g. SV001@unihub)
+-- is_synced: TRUE for students from school data, FALSE for admin/staff
 -- ============================================================
 
-INSERT INTO users (id, student_id, full_name, email, password_hash, role, faculty)
+INSERT INTO users (id, student_id, full_name, email, password_hash, role, faculty, is_synced)
 VALUES
     (
         uuid_generate_v4(),
@@ -161,7 +164,8 @@ VALUES
         'admin@unihub.edu.vn',
         '$2b$10$mJq/00Jb.s6.Fz7vQuSilOn4atG6fnws41EscfC8DQ91JKWQazcla',
         'ORGANIZER',
-        'Ban Tổ Chức'
+        'Ban Tổ Chức',
+        FALSE
     ),
     (
         uuid_generate_v4(),
@@ -170,15 +174,17 @@ VALUES
         'staff@unihub.edu.vn',
         '$2b$10$mJq/00Jb.s6.Fz7vQuSilOn4atG6fnws41EscfC8DQ91JKWQazcla',
         'CHECKIN_STAFF',
-        'Ban Tổ Chức'
+        'Ban Tổ Chức',
+        FALSE
     ),
     (
         uuid_generate_v4(),
         'SV001',
         'Le Van Sinh Vien',
         'sinhvien@unihub.edu.vn',
-        '$2b$10$mJq/00Jb.s6.Fz7vQuSilOn4atG6fnws41EscfC8DQ91JKWQazcla',
+        '$2b$10$etAXcC7E0Y/BA2omIUnDYea4MBpM1s4QowhthZRwIUjBpZF/14K3y',
         'STUDENT',
-        'Công nghệ Thông tin'
+        'Công nghệ Thông tin',
+        TRUE
     )
 ON CONFLICT (email) DO NOTHING;

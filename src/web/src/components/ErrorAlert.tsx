@@ -11,6 +11,7 @@ const ERROR_LABELS: Record<string, string> = {
   SCHEDULE_CONFLICT: '⏰ Trùng lịch với workshop đã đăng ký',
   INVALID_CREDENTIALS: '🔒 Sai thông tin đăng nhập',
   SEAT_HOLD_EXPIRED: '⏱️ Thời gian giữ chỗ đã hết',
+  STUDENT_NOT_VERIFIED: '🏫 Tài khoản chưa xác thực từ nhà trường',
 };
 
 export default function ErrorAlert({ code, message, onDismiss }: ErrorAlertProps) {

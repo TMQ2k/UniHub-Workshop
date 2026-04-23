@@ -67,20 +67,12 @@ export default function Navbar() {
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center gap-3">
-                  <Link
-                    href="/login"
-                    className="rounded-lg bg-white/10 px-4 py-1.5 text-sm font-medium text-gray-300 transition-colors hover:bg-white/20 hover:text-white"
-                  >
-                    Đăng nhập
-                  </Link>
-                  <Link
-                    href="/register"
-                    className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500"
-                  >
-                    Đăng ký
-                  </Link>
-                </div>
+                <Link
+                  href="/login"
+                  className="rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:brightness-110"
+                >
+                  Đăng nhập
+                </Link>
               )}
             </>
           )}

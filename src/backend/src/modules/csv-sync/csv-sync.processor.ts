@@ -215,7 +215,7 @@ export class CsvSyncProcessor extends WorkerHost {
           });
 
           if (existing) {
-            // UPDATE
+            // UPDATE — mark as synced from school data
             await queryRunner.manager.update(User, existing.id, {
               fullName: row.full_name!,
               email: row.email!,
@@ -223,11 +223,12 @@ export class CsvSyncProcessor extends WorkerHost {
               enrollmentYear: row.enrollment_year
                 ? parseInt(row.enrollment_year, 10)
                 : existing.enrollmentYear,
+              isSynced: true,
             });
             summary.updated++;
           } else {
-            // INSERT — new student with default password
-            const defaultPassword = `${row.student_id}UniHub2026`;
+            // INSERT — new student with default password: {MSSV}@unihub
+            const defaultPassword = `${row.student_id}@unihub`;
             const passwordHash = await AuthService.hashPassword(defaultPassword);
 
             const newUser = queryRunner.manager.create(User, {
@@ -240,6 +241,7 @@ export class CsvSyncProcessor extends WorkerHost {
               enrollmentYear: row.enrollment_year
                 ? parseInt(row.enrollment_year, 10)
                 : null,
+              isSynced: true,
             });
 
             await queryRunner.manager.save(newUser);

@@ -3,6 +3,7 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
   ServiceUnavailableException,
   Logger,
 } from '@nestjs/common';
@@ -46,6 +47,18 @@ export class RegistrationService {
     studentId: string,
     studentEmail: string,
   ) {
+    // ── Pre-check: Verify student is synced from school data ──
+    const student = await this.userRepo.findOne({ where: { id: studentId } });
+    if (!student || !student.isSynced) {
+      throw new ForbiddenException({
+        success: false,
+        error: {
+          code: 'STUDENT_NOT_VERIFIED',
+          message: 'Tài khoản chưa được xác thực từ dữ liệu nhà trường. Vui lòng liên hệ phòng đào tạo.',
+        },
+      });
+    }
+
     try {
       return await this.dataSource.transaction(async (manager) => {
         // Step 1: SELECT ... FOR UPDATE — Pessimistic Lock

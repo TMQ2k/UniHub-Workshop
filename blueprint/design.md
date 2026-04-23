@@ -66,7 +66,7 @@ graph TB
 
     SYSTEM -- "Xử lý thanh toán<br/>(Circuit Breaker)" --> PAY
     SYSTEM -- "Gửi PDF,<br/>nhận tóm tắt" --> AI
-    LEGACY -- "CSV file<br/>(2:00 AM daily)" --> SYSTEM
+    LEGACY -- "CSV file<br/>(every 15 min)" --> SYSTEM
 
     style SYSTEM fill:#1168bd,stroke:#0b4884,color:#fff
     style PAY fill:#999,stroke:#666,color:#fff
@@ -108,7 +108,7 @@ graph TB
 
     API -- "HTTPS<br/>(Circuit Breaker)" --> PAY
     API -- "HTTPS<br/>(Streaming)" --> AI
-    CSV -- "File Read<br/>(Cron 2AM)" --> API
+    CSV -- "File Read<br/>(Cron 15min)" --> API
 
     style WEB fill:#438dd5,stroke:#2e6295,color:#fff
     style MOBILE fill:#438dd5,stroke:#2e6295,color:#fff
@@ -144,7 +144,7 @@ graph TB
 erDiagram
     users {
         uuid id PK
-        varchar student_id UK "nullable, auto-gen SV###"
+        varchar student_id UK "from CSV sync"
         varchar full_name
         varchar email UK
         varchar password_hash
@@ -152,6 +152,7 @@ erDiagram
         varchar faculty "nullable"
         int enrollment_year "nullable"
         boolean is_locked "default false"
+        boolean is_synced "default false, TRUE when CSV synced"
         varchar refresh_token_hash "nullable"
         timestamp created_at
         timestamp updated_at
@@ -420,18 +421,18 @@ sequenceDiagram
     APP-->>ST: ✅ "Đồng bộ thành công: 2/2"
 ```
 
-### Luồng 3 — Import CSV đêm
+### Luồng 3 — Import CSV định kỳ (tạo tài khoản sinh viên)
 
 ```mermaid
 sequenceDiagram
-    participant CRON as Cron Job (2AM)
+    participant CRON as Cron Job (15min)
     participant Q as BullMQ Queue
     participant WORKER as Queue Worker
     participant FS as File System
     participant DB as PostgreSQL
 
-    CRON->>FS: Scan /data/import/students_*.csv
-    FS-->>CRON: Found: students_20260422.csv
+    CRON->>FS: Scan /data/sample-students.csv
+    FS-->>CRON: Found: sample-students.csv
     CRON->>Q: Enqueue csv-import job
 
     Q->>WORKER: Pick job
@@ -446,10 +447,10 @@ sequenceDiagram
             WORKER->>WORKER: Parse + validate rows
             WORKER->>DB: BEGIN TRANSACTION
             WORKER->>DB: UPSERT batch (by student_id)
+            Note right of DB: New student → password = {MSSV}@unihub
             WORKER->>DB: COMMIT
         end
         WORKER->>DB: Log COMPLETED (summary)
-        WORKER->>FS: Move file to /processed/
     end
 ```
 

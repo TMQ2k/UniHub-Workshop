@@ -29,7 +29,7 @@ Xây dựng hệ thống **UniHub Workshop** để số hóa toàn bộ quy trì
 | 3 | Check-in nhanh tại sự kiện | Quét QR < 2 giây, hỗ trợ offline khi mất mạng |
 | 4 | Thanh toán an toàn | Không trừ tiền hai lần, hệ thống vẫn hoạt động khi cổng thanh toán lỗi |
 | 5 | Thông báo tự động, mở rộng được | Xác nhận đăng ký qua email + app, dễ bổ sung kênh mới (Telegram, SMS) |
-| 6 | Đồng bộ dữ liệu sinh viên | Nhập CSV từ hệ thống cũ hàng đêm, không gián đoạn hệ thống |
+| 6 | Đồng bộ dữ liệu sinh viên | Nhập CSV từ hệ thống cũ định kỳ 15 phút, tạo tài khoản tự động với mật khẩu `{MSSV}@unihub` |
 | 7 | Hỗ trợ AI tóm tắt nội dung workshop | Ban tổ chức upload PDF → hệ thống tự tóm tắt hiển thị trên trang chi tiết |
 
 ---
@@ -38,6 +38,7 @@ Xây dựng hệ thống **UniHub Workshop** để số hóa toàn bộ quy trì
 
 ### Sinh viên (~12.000 người)
 
+- Đăng nhập bằng MSSV + mật khẩu (tài khoản được đồng bộ từ hệ thống trường, mật khẩu mặc định `{MSSV}@unihub`)
 - Xem danh sách tất cả workshop: thông tin diễn giả, phòng, sơ đồ, **số chỗ còn lại theo thời gian thực**
 - Đăng ký tham dự (miễn phí hoặc có phí)
 - Nhận **mã QR** sau đăng ký thành công để check-in
@@ -73,7 +74,7 @@ Xây dựng hệ thống **UniHub Workshop** để số hóa toàn bộ quy trì
 - ✅ Thanh toán qua **mock adapter** (interface thật, implementation giả lập)
 - ✅ Thông báo email + app push
 - ✅ AI Summary từ PDF upload (Anthropic Claude API)
-- ✅ Đồng bộ sinh viên từ CSV (cron job đêm)
+- ✅ Đồng bộ sinh viên từ CSV (cron job 15 phút), tạo tài khoản tự động
 - ✅ Các cơ chế bảo vệ: Pessimistic Lock, Token Bucket, Circuit Breaker, Idempotency Key
 - ✅ Docker Compose cho môi trường local
 - ✅ Seed data và hướng dẫn khởi chạy
@@ -140,4 +141,4 @@ Xây dựng hệ thống **UniHub Workshop** để số hóa toàn bộ quy trì
 
 **Hậu quả nếu không xử lý:** Không xác thực được sinh viên khi đăng ký, hoặc dữ liệu lỗi/trùng gây sai lệch.
 
-**Giải pháp dự kiến:** Cron job 2:00 AM → đọc CSV → validate header → parse từng row → upsert theo `student_id` → log kết quả. Chạy trong BullMQ background queue, không gián đoạn hệ thống.
+**Giải pháp dự kiến:** Cron job mỗi 15 phút → đọc CSV → validate header → parse từng row → upsert theo `student_id` → tạo tài khoản với mật khẩu mặc định `{MSSV}@unihub` → log kết quả. Chạy trong BullMQ background queue, không gián đoạn hệ thống.

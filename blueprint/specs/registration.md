@@ -2,7 +2,7 @@
 
 ## Mô tả
 
-Module xử lý đăng ký chỗ ngồi workshop. Đảm bảo **không tranh chấp chỗ ngồi** khi hàng trăm sinh viên đăng ký cùng lúc bằng **Pessimistic Lock** kết hợp database transaction. Sau đăng ký thành công (miễn phí), sinh viên nhận **mã QR** để check-in. Workshop có phí → chờ thanh toán (`PENDING_PAYMENT`).
+Module xử lý đăng ký chỗ ngồi workshop. Đảm bảo **không tranh chấp chỗ ngồi** khi hàng trăm sinh viên đăng ký cùng lúc bằng **Pessimistic Lock** kết hợp database transaction. Trước khi đăng ký, hệ thống **xác thực sinh viên có nằm trong dữ liệu nhà trường** (từ CSV Sync, cờ `is_synced`). Sau đăng ký thành công (miễn phí), sinh viên nhận **mã QR** để check-in. Workshop có phí → chờ thanh toán (`PENDING_PAYMENT`).
 
 ## Actor
 
@@ -17,7 +17,8 @@ Module xử lý đăng ký chỗ ngồi workshop. Đảm bảo **không tranh ch
 
 1. STUDENT bấm "Đăng ký". Client gửi `POST /registrations` với `{ workshopId }`.
 2. Rate limit: **10 req/min per IP** bằng Token Bucket (`RateLimitGuard`).
-3. Server bắt đầu **database transaction** qua `DataSource.transaction()`:
+3. **Xác thực sinh viên từ dữ liệu nhà trường**: Kiểm tra `user.isSynced === true`. Nếu `false` → trả `403 STUDENT_NOT_VERIFIED`.
+4. Server bắt đầu **database transaction** qua `DataSource.transaction()`:
    a. `SELECT ... FOR UPDATE` trên workshop row (Pessimistic Lock — `setLock('pessimistic_write')`).
    b. Kiểm tra workshop tồn tại.
    c. Kiểm tra `workshop.status === PUBLISHED`.
@@ -76,6 +77,7 @@ Module xử lý đăng ký chỗ ngồi workshop. Đảm bảo **không tranh ch
 
 | Kịch bản | Xử lý | Error Code | HTTP |
 |----------|-------|------------|------|
+| SV chưa có trong dữ liệu nhà trường | Từ chối, yêu cầu liên hệ phòng đào tạo | `STUDENT_NOT_VERIFIED` | 403 |
 | Workshop hết chỗ | Từ chối ngay | `WORKSHOP_FULL` | 409 |
 | SV đã đăng ký workshop này | Từ chối | `ALREADY_REGISTERED` | 409 |
 | Workshop trùng lịch | Từ chối | `SCHEDULE_CONFLICT` | 409 |

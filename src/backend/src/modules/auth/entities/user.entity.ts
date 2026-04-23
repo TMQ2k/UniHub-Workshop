@@ -41,6 +41,9 @@ export class User {
   @Column({ name: 'is_locked', type: 'boolean', default: false })
   isLocked!: boolean;
 
+  @Column({ name: 'is_synced', type: 'boolean', default: false })
+  isSynced!: boolean;
+
   @Column({ name: 'refresh_token_hash', type: 'varchar', length: 255, nullable: true })
   refreshTokenHash!: string | null;
 
