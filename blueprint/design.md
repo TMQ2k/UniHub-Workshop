@@ -144,15 +144,15 @@ graph TB
 erDiagram
     users {
         uuid id PK
-        varchar student_id UK
+        varchar student_id UK "nullable, auto-gen SV###"
         varchar full_name
         varchar email UK
         varchar password_hash
         varchar role "STUDENT | ORGANIZER | CHECKIN_STAFF"
-        varchar faculty
-        int enrollment_year
-        boolean is_locked
-        varchar refresh_token_hash
+        varchar faculty "nullable"
+        int enrollment_year "nullable"
+        boolean is_locked "default false"
+        varchar refresh_token_hash "nullable"
         timestamp created_at
         timestamp updated_at
     }
@@ -296,12 +296,13 @@ Sử dụng **Role-Based Access Control** với 3 roles cố định. Mỗi role
 |-----------|---------|-----------|---------------|
 | `workshop:read` | ✅ | ✅ | ❌ |
 | `workshop:write` | ❌ | ✅ | ❌ |
-| `registration:create` | ✅ | ✅ | ❌ |
-| `registration:read:own` | ✅ | ✅ | ❌ |
+| `registration:create` | ✅ | ❌ | ❌ |
+| `registration:read:own` | ✅ | ❌ | ❌ |
 | `registration:read:all` | ❌ | ✅ | ❌ |
 | `payment:create` | ✅ | ❌ | ❌ |
+| `payment:stats` | ❌ | ✅ | ❌ |
 | `checkin:scan` | ❌ | ❌ | ✅ |
-| `checkin:self` | ✅ | ✅ | ❌ |
+| `notification:read:own` | ✅ | ✅ | ❌ |
 | `stats:read` | ❌ | ✅ | ❌ |
 | `csv-sync:manage` | ❌ | ✅ | ❌ |
 | `ai-summary:upload` | ❌ | ✅ | ❌ |
@@ -310,16 +311,19 @@ Sử dụng **Role-Based Access Control** với 3 roles cố định. Mỗi role
 
 ```
 Guard chain: JwtAuthGuard → RolesGuard → Controller method
+Rate-limited endpoints thêm: RateLimitGuard (Token Bucket trên Redis)
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ORGANIZER')
-@Post('workshops')
-async createWorkshop(@Body() dto) { ... }
+@Roles(UserRole.ORGANIZER)
+@Post()
+async create(@Body() dto: CreateWorkshopDto, @Request() req) { ... }
 ```
 
 - JWT payload: `{ sub: userId, role: "STUDENT" | "ORGANIZER" | "CHECKIN_STAFF" }`
+- JWT sử dụng **2 secret keys riêng biệt**: `JWT_ACCESS_SECRET` (access token) và `JWT_REFRESH_SECRET` (refresh token).
 - Token verified stateless (không query DB mỗi request).
 - Role stored trong `users.role` column, không dùng bảng riêng (KISS — chỉ 3 roles cố định).
+- `@Roles()` decorator sử dụng `UserRole` enum, `RolesGuard` dùng `Reflector` để lấy metadata.
 
 ---
 

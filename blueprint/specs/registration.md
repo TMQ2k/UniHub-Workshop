@@ -2,59 +2,75 @@
 
 ## Mô tả
 
-Module xử lý đăng ký chỗ ngồi workshop. Đảm bảo **không tranh chấp chỗ ngồi** khi hàng trăm sinh viên đăng ký cùng lúc bằng **Pessimistic Lock** kết hợp database transaction. Sau đăng ký thành công, sinh viên nhận **mã QR** để check-in.
+Module xử lý đăng ký chỗ ngồi workshop. Đảm bảo **không tranh chấp chỗ ngồi** khi hàng trăm sinh viên đăng ký cùng lúc bằng **Pessimistic Lock** kết hợp database transaction. Sau đăng ký thành công (miễn phí), sinh viên nhận **mã QR** để check-in. Workshop có phí → chờ thanh toán (`PENDING_PAYMENT`).
 
 ## Actor
 
 | Actor | Vai trò |
 |-------|---------|
 | STUDENT | Đăng ký workshop, xem đăng ký của mình, hủy đăng ký |
-| ORGANIZER | Xem tất cả đăng ký, xem thống kê |
+| ORGANIZER | Xem tất cả đăng ký theo workshop (kèm thống kê) |
 
 ## Luồng chính
 
 ### Luồng 1 — Đăng ký workshop miễn phí
 
-1. STUDENT chọn workshop, bấm "Đăng ký".
-2. Client gửi `POST /registrations` với `{ workshopId }`.
-3. Server bắt đầu **database transaction**:
-   a. `SELECT ... FOR UPDATE` trên workshop row (Pessimistic Lock).
-   b. Kiểm tra `availableSeats > 0`.
-   c. Kiểm tra STUDENT chưa đăng ký workshop này.
-   d. Kiểm tra workshop không trùng lịch với workshop đã đăng ký.
-   e. Giảm `availableSeats -= 1`.
-   f. Tạo registration record `status = CONFIRMED`.
-   g. Sinh **QR code** (chứa `registrationId` + `studentId` + HMAC signature).
-   h. Commit transaction.
-4. Enqueue notification job (email + app push xác nhận).
-5. Trả `201 Created` với registration + QR code data.
+1. STUDENT bấm "Đăng ký". Client gửi `POST /registrations` với `{ workshopId }`.
+2. Rate limit: **10 req/min per IP** bằng Token Bucket (`RateLimitGuard`).
+3. Server bắt đầu **database transaction** qua `DataSource.transaction()`:
+   a. `SELECT ... FOR UPDATE` trên workshop row (Pessimistic Lock — `setLock('pessimistic_write')`).
+   b. Kiểm tra workshop tồn tại.
+   c. Kiểm tra `workshop.status === PUBLISHED`.
+   d. Kiểm tra workshop chưa bắt đầu (`startTime > now`).
+   e. Kiểm tra `availableSeats > 0`.
+   f. Kiểm tra STUDENT chưa đăng ký workshop này (trừ CANCELLED).
+   g. Kiểm tra không trùng lịch với workshop đã đăng ký (inner join Workshop check overlap).
+   h. Giảm `availableSeats -= 1`.
+   i. Tạo registration record `status = CONFIRMED`, sinh **QR code** (HMAC-SHA256 signed).
+   j. Update QR code lại với actual registrationId (vì ID chỉ có sau save).
+   k. Commit transaction.
+4. Controller fire-and-forget `notifyRegistrationConfirmedById()` → enqueue notification (email + QR).
+5. Trả `201 Created` với registration info + QR code data.
 
 ### Luồng 2 — Đăng ký workshop có phí
 
-1. Bước 1–3 giống Luồng 1, nhưng ở bước (f) set `status = PENDING_PAYMENT`.
-2. Giữ chỗ (seat reserved) trong **15 phút**.
-3. Redirect sinh viên sang Payment flow (xem `payment.md`).
-4. Khi payment thành công → callback cập nhật `status = CONFIRMED`, sinh QR.
-5. Nếu payment timeout (15 phút) → tự động hủy registration, trả lại chỗ.
+1. Bước giống Luồng 1, nhưng ở bước (i) set `status = PENDING_PAYMENT`, `qrCode = null`.
+2. `seatHoldExpiresAt = now + 15 phút`.
+3. Response trả `paymentUrl` để redirect sang Payment flow.
+4. Khi payment thành công → `RegistrationService.confirmPayment()` được gọi: set `status = CONFIRMED`, sinh QR code.
+5. Nếu seat hold hết hạn → `expirePendingRegistrations()` (cron-callable) tự động hủy, trả lại chỗ.
 
 ### Luồng 3 — Hủy đăng ký (STUDENT)
 
-1. STUDENT chọn đăng ký cần hủy.
-2. Client gửi `DELETE /registrations/:id`.
-3. Server kiểm tra:
-   - Registration thuộc về STUDENT đang đăng nhập.
-   - Workshop chưa bắt đầu (hoặc còn trong thời hạn hủy: ≥ 2 giờ trước giờ bắt đầu).
-4. Database transaction: set `status = CANCELLED`, tăng `availableSeats += 1`.
-5. Nếu đã thanh toán → enqueue refund job.
-6. Trả `200 OK`.
+1. `DELETE /registrations/:id`.
+2. Trong DB transaction:
+   a. Kiểm tra registration thuộc STUDENT đang đăng nhập.
+   b. Kiểm tra chưa CANCELLED.
+   c. Kiểm tra cancellation deadline: ≥ 2 giờ trước workshop `startTime`.
+   d. Restore seat: `workshop.availableSeats += 1`.
+   e. Set `status = CANCELLED`, `qrCode = null`.
+3. Trả `200 OK` với `{ id, status }`.
 
 ### Luồng 4 — Xem đăng ký của mình (STUDENT)
 
-1. `GET /registrations/me` → trả danh sách đăng ký của STUDENT, bao gồm QR code data.
+1. `GET /registrations/me` → trả danh sách, bao gồm `workshopTitle`, `qrCode`, sắp xếp `createdAt DESC`.
 
 ### Luồng 5 — Xem tất cả đăng ký (ORGANIZER)
 
-1. `GET /registrations?workshopId=...` → trả danh sách đăng ký cho workshop cụ thể.
+1. `GET /registrations?workshopId=uuid` (bắt buộc, validate UUID).
+2. Trả danh sách kèm `studentName`, thống kê `{ total, confirmed, pending, cancelled }`.
+
+### Luồng 6 — Confirm payment callback (Internal)
+
+1. `PaymentService` gọi `RegistrationService.confirmPayment(registrationId)`.
+2. Set `status = CONFIRMED`, sinh QR code, clear `seatHoldExpiresAt`.
+3. Trả registration entity đã cập nhật.
+
+### Luồng 7 — Expire pending registrations (Cron)
+
+1. Tìm tất cả registration `PENDING_PAYMENT` có `seatHoldExpiresAt <= now`.
+2. Mỗi record: set `CANCELLED` + restore `availableSeats` (trong transaction riêng).
+3. Trả số lượng đã expire.
 
 ## Kịch bản lỗi
 
@@ -62,48 +78,53 @@ Module xử lý đăng ký chỗ ngồi workshop. Đảm bảo **không tranh ch
 |----------|-------|------------|------|
 | Workshop hết chỗ | Từ chối ngay | `WORKSHOP_FULL` | 409 |
 | SV đã đăng ký workshop này | Từ chối | `ALREADY_REGISTERED` | 409 |
-| Workshop trùng lịch với workshop đã đăng ký | Từ chối | `SCHEDULE_CONFLICT` | 409 |
+| Workshop trùng lịch | Từ chối | `SCHEDULE_CONFLICT` | 409 |
 | Workshop chưa PUBLISHED | Từ chối | `WORKSHOP_NOT_AVAILABLE` | 400 |
 | Workshop đã bắt đầu | Từ chối | `WORKSHOP_STARTED` | 400 |
-| Hủy đăng ký < 2 giờ trước giờ bắt đầu | Từ chối | `CANCELLATION_DEADLINE_PASSED` | 400 |
-| Payment timeout (15 phút) | Tự động hủy registration, trả chỗ | — | — |
-| Database lock timeout | Retry 1 lần, nếu vẫn lỗi trả 503 | `SERVICE_UNAVAILABLE` | 503 |
+| Hủy đăng ký < 2 giờ trước | Từ chối | `CANCELLATION_DEADLINE_PASSED` | 400 |
+| Đăng ký đã bị hủy trước đó | Từ chối | `ALREADY_CANCELLED` | 400 |
+| Registration không tồn tại | Từ chối | `REGISTRATION_NOT_FOUND` | 404 |
+| Database lock timeout | Log error, trả 503 | `SERVICE_UNAVAILABLE` | 503 |
 
 ## Ràng buộc
 
 ### Tính nhất quán (Consistency)
-- **Bắt buộc Pessimistic Lock** (`SELECT ... FOR UPDATE`) cho thao tác trừ chỗ ngồi.
-- Toàn bộ logic đăng ký (check seats → trừ seats → tạo record) trong **cùng 1 transaction**.
-- Không bao giờ xảy ra `availableSeats < 0` (over-booking = zero tolerance).
+- **Pessimistic Lock** (`setLock('pessimistic_write')`) cho thao tác trừ chỗ ngồi.
+- Toàn bộ logic đăng ký trong **cùng 1 transaction** (`DataSource.transaction()`).
+- Không bao giờ xảy ra `availableSeats < 0` (zero over-booking).
 
 ### Hiệu năng
-- Registration endpoint respond < **1 giây** kể cả dưới tải 120 req/s.
-- Rate limit `POST /registrations`: **10 req/min per IP**.
+- Rate limit `POST /registrations`: **10 req/min per IP** bằng Token Bucket.
 
 ### QR Code
 - Chứa: `registrationId`, `studentId`, `workshopId`.
-- Ký bằng **HMAC-SHA256** với secret key để chống giả mạo.
-- Format: Base64 encoded JSON string.
+- Ký bằng **HMAC-SHA256** với `QR_HMAC_SECRET` env var.
+- Format: Base64 encoded JSON string (payload + signature).
 
 ### Seat hold cho payment
-- Chỗ ngồi được giữ **15 phút** cho workshop có phí.
-- Cron job chạy mỗi phút: tìm registration `PENDING_PAYMENT` quá 15 phút → tự động hủy.
+- Chỗ ngồi giữ **15 phút** (`SEAT_HOLD_MINUTES = 15`).
+- Hết hạn → `expirePendingRegistrations()` tự động hủy, trả lại chỗ.
+
+### Notification
+- Gửi notification **fire-and-forget** — không block response.
+- Controller gọi `.catch(() => {})` để swallow lỗi notification.
 
 ## Tiêu chí chấp nhận
 
-- [ ] SV đăng ký workshop miễn phí thành công, nhận QR code.
-- [ ] SV đăng ký workshop có phí → status = PENDING_PAYMENT, chỗ được giữ 15 phút.
-- [ ] 100 SV đăng ký cùng lúc workshop 60 chỗ → chỉ 60 SV thành công, 40 nhận WORKSHOP_FULL.
-- [ ] Không bao giờ xảy ra `availableSeats < 0`.
-- [ ] SV không đăng ký trùng workshop hoặc trùng lịch.
-- [ ] SV hủy đăng ký → chỗ ngồi được trả lại, `availableSeats += 1`.
-- [ ] Payment timeout → registration tự động hủy, chỗ trả lại.
+- [x] SV đăng ký workshop miễn phí → status CONFIRMED, nhận QR code.
+- [x] SV đăng ký workshop có phí → status PENDING_PAYMENT, nhận paymentUrl.
+- [x] Pessimistic Lock đảm bảo zero over-booking.
+- [x] SV không đăng ký trùng workshop hoặc trùng lịch.
+- [x] SV hủy đăng ký → chỗ trả lại, QR code xóa.
+- [x] Expire pending registrations trả lại chỗ.
+- [x] Payment confirm callback sinh QR code.
+- [x] Rate limit 10 req/min trên POST /registrations.
 
 ## API Contract
 
 ### POST /registrations
 
-**Headers:** `Authorization: Bearer <accessToken>` (STUDENT)
+**Guards:** `JwtAuthGuard`, `RolesGuard`, `RateLimitGuard` — `@Roles(STUDENT)`, `@RateLimit(10/min)`
 
 ```json
 // Request
@@ -113,10 +134,10 @@ Module xử lý đăng ký chỗ ngồi workshop. Đảm bảo **không tranh ch
 { "success": true,
   "data": {
     "id": "uuid", "workshopId": "uuid", "studentId": "uuid",
-    "status": "CONFIRMED",
-    "qrCode": "eyJyZWdpc3RyYXRpb25JZCI6...",
-    "createdAt": "2026-04-22T07:00:00Z"
-  }
+    "status": "CONFIRMED", "qrCode": "eyJ...",
+    "createdAt": "ISO8601"
+  },
+  "meta": { "timestamp": "ISO8601" }
 }
 
 // Response 201 (có phí)
@@ -124,36 +145,45 @@ Module xử lý đăng ký chỗ ngồi workshop. Đảm bảo **không tranh ch
   "data": {
     "id": "uuid", "status": "PENDING_PAYMENT",
     "paymentUrl": "/payments/initiate?registrationId=uuid",
-    "seatHoldExpiresAt": "2026-04-22T07:15:00Z"
-  }
+    "seatHoldExpiresAt": "ISO8601"
+  },
+  "meta": { "timestamp": "ISO8601" }
 }
 ```
 
 ### GET /registrations/me
 
+**Guards:** `JwtAuthGuard`, `RolesGuard` — `@Roles(STUDENT)`
+
 ```json
-// Response 200
 { "success": true,
   "data": [
     { "id": "uuid", "workshopId": "uuid", "workshopTitle": "...",
       "status": "CONFIRMED", "qrCode": "...", "createdAt": "..." }
-  ]
+  ],
+  "meta": { "timestamp": "ISO8601" }
 }
 ```
 
 ### GET /registrations?workshopId=uuid (ORGANIZER)
 
+**Guards:** `JwtAuthGuard`, `RolesGuard` — `@Roles(ORGANIZER)`
+
 ```json
-// Response 200
 { "success": true,
-  "data": [...],
-  "meta": { "total": 45, "confirmed": 40, "pending": 3, "cancelled": 2 }
+  "data": [
+    { "id": "uuid", "studentId": "uuid", "studentName": "...",
+      "status": "CONFIRMED", "createdAt": "..." }
+  ],
+  "meta": { "total": 45, "confirmed": 40, "pending": 3, "cancelled": 2, "timestamp": "ISO8601" }
 }
 ```
 
 ### DELETE /registrations/:id
 
+**Guards:** `JwtAuthGuard`, `RolesGuard` — `@Roles(STUDENT)`
+
 ```json
-// Response 200
-{ "success": true, "data": { "id": "uuid", "status": "CANCELLED" } }
+{ "success": true, "data": { "id": "uuid", "status": "CANCELLED" },
+  "meta": { "timestamp": "ISO8601" } }
 ```

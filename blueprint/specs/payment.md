@@ -2,15 +2,14 @@
 
 ## Mô tả
 
-Module xử lý thanh toán cho workshop có phí. Sử dụng **mock adapter** với interface thật để dễ swap provider. Tích hợp **Circuit Breaker** để cô lập lỗi payment gateway và **Idempotency Key** để chống double charge.
+Module xử lý thanh toán cho workshop có phí. Sử dụng **mock adapter** với interface thật (`IPaymentProvider`) để dễ swap provider. Tích hợp **Circuit Breaker** (in-memory) để cô lập lỗi payment gateway và **Idempotency Key** (Redis via `IdempotencyInterceptor`) để chống double charge.
 
 ## Actor
 
 | Actor | Vai trò |
 |-------|---------|
-| STUDENT | Thanh toán phí workshop, xem trạng thái thanh toán |
-| ORGANIZER | Xem lịch sử thanh toán, xem doanh thu |
-| Payment Gateway (External) | Xử lý giao dịch thanh toán (mock) |
+| STUDENT | Thanh toán phí workshop |
+| ORGANIZER | Xem thống kê thanh toán (doanh thu, số giao dịch) |
 
 ## Luồng chính
 
@@ -18,102 +17,109 @@ Module xử lý thanh toán cho workshop có phí. Sử dụng **mock adapter** 
 
 1. Sau khi đăng ký workshop có phí, registration ở `PENDING_PAYMENT`.
 2. Client gửi `POST /payments` với `{ registrationId }` và header `Idempotency-Key: <uuid-v4>`.
-3. Server kiểm tra **Idempotency Key** trong Redis:
+3. **IdempotencyInterceptor** kiểm tra key trong Redis:
    - **Đã có**: trả response đã lưu ngay lập tức (không xử lý lại).
-   - **Chưa có**: tiếp tục xử lý.
-4. Server kiểm tra **Circuit Breaker** state:
-   - **OPEN**: reject ngay với `503 PAYMENT_UNAVAILABLE`.
-   - **CLOSED / HALF_OPEN**: tiếp tục.
-5. Server tạo payment record `status = PROCESSING`.
-6. Gọi **PaymentProvider** (interface) → `processPayment(amount, metadata)`.
-7. Nếu thành công:
-   - Payment `status = COMPLETED`.
-   - Registration `status = CONFIRMED`.
-   - Sinh QR code.
-   - Enqueue notification (xác nhận thanh toán + QR).
-   - Lưu response vào Redis với Idempotency Key (TTL 24h).
-8. Trả `200 OK` với payment confirmation.
+   - **Chưa có**: tiếp tục xử lý, sau khi hoàn tất lưu response vào Redis (TTL 24h).
+4. `PaymentService.processPayment()`:
+   a. Validate registration tồn tại, thuộc student, status = `PENDING_PAYMENT`.
+   b. Kiểm tra seat hold chưa hết hạn (`seatHoldExpiresAt`).
+   c. Lấy workshop info (price, title).
+   d. Tạo payment record `status = PROCESSING`.
+   e. Gọi `CircuitBreaker.execute()`:
+      - **OPEN**: reject ngay `CircuitBreakerOpenError` → set payment FAILED → `503 PAYMENT_UNAVAILABLE`.
+      - **CLOSED / HALF_OPEN**: gọi `PaymentProvider.processPayment(amount, metadata)`.
+   f. Nếu provider trả `success = false`: set FAILED, throw `502 PAYMENT_FAILED`.
+   g. Nếu provider thành công:
+      - Payment `status = COMPLETED`, ghi `transactionId`, `paidAt`.
+      - Gọi `RegistrationService.confirmPayment()` → registration CONFIRMED + sinh QR code.
+      - Enqueue notification `PAYMENT_CONFIRMED` (fire-and-forget, `.catch(() => {})`).
+   h. Lưu response vào Redis qua IdempotencyInterceptor.
+5. Trả `200 OK` với payment confirmation kèm `qrCode`.
 
-### Luồng 2 — Payment Gateway lỗi (Circuit Breaker)
+### Luồng 2 — Circuit Breaker states
 
-1. Payment gateway trả lỗi hoặc timeout.
-2. Circuit Breaker ghi nhận lỗi.
-3. Nếu đạt **5 lỗi liên tiếp trong 30 giây** → CB chuyển sang **OPEN**.
-4. Khi CB OPEN:
-   - Mọi request payment mới → reject ngay `503 PAYMENT_UNAVAILABLE`.
-   - Các tính năng khác (xem workshop, đăng ký miễn phí...) **KHÔNG bị ảnh hưởng**.
-5. Sau **60 giây** → CB chuyển sang **HALF_OPEN**.
-6. Cho 1 request thử:
-   - Thành công → CB trở về **CLOSED**.
-   - Thất bại → CB quay lại **OPEN**, đợi thêm 60 giây.
+1. **CLOSED**: forward request bình thường. Đếm lỗi liên tiếp.
+2. Nếu **5 lỗi liên tiếp trong 30 giây** → chuyển sang **OPEN**.
+3. **OPEN**: reject ngay `503 PAYMENT_UNAVAILABLE`. Không gọi gateway. Các tính năng khác **không bị ảnh hưởng**.
+4. Sau **60 giây** → chuyển sang **HALF_OPEN** (kiểm tra tự động trong `getState()`).
+5. **HALF_OPEN**: cho 1 request thử:
+   - Thành công → **CLOSED**, reset failure counter.
+   - Thất bại → **OPEN**, đợi thêm 60 giây.
 
 ### Luồng 3 — Client retry (Idempotency Key)
 
 1. Client gửi request payment với cùng `Idempotency-Key`.
-2. Server tìm key trong Redis → đã tồn tại.
-3. Trả response đã lưu trước đó → **không xử lý lại, không trừ tiền lần 2**.
+2. `IdempotencyInterceptor` tìm key trong Redis → đã tồn tại.
+3. Trả response đã lưu → **không xử lý lại, không trừ tiền lần 2**.
 
-### Luồng 4 — Hoàn tiền (Refund)
+### Luồng 4 — Xem thanh toán (STUDENT)
 
-1. Khi SV hủy đăng ký hoặc ORGANIZER hủy workshop.
-2. Server tạo refund record, gọi `PaymentProvider.refund()`.
-3. Update payment `status = REFUNDED`.
+1. `GET /payments/:registrationId` → trả payment detail (id, amount, status, transactionId, paidAt).
+
+### Luồng 5 — Thống kê thanh toán (ORGANIZER)
+
+1. `GET /payments/stats` → trả `{ totalRevenue, totalTransactions, completedPayments, refundedPayments }`.
 
 ## Kịch bản lỗi
 
 | Kịch bản | Xử lý | Error Code | HTTP |
 |----------|-------|------------|------|
-| Payment gateway timeout | CB ghi nhận lỗi, trả lỗi cho client | `PAYMENT_TIMEOUT` | 504 |
-| CB đang OPEN | Reject ngay, không gọi gateway | `PAYMENT_UNAVAILABLE` | 503 |
+| CB đang OPEN | Reject ngay, payment set FAILED | `PAYMENT_UNAVAILABLE` | 503 |
+| Provider trả success=false | Payment set FAILED | `PAYMENT_FAILED` | 502 |
+| Provider timeout/exception | CB ghi nhận lỗi, payment set FAILED | `PAYMENT_TIMEOUT` | 504 |
 | Idempotency Key trùng | Trả cached response | — | 200 |
 | Registration không ở PENDING_PAYMENT | Từ chối | `INVALID_PAYMENT_STATE` | 400 |
-| Seat hold đã hết hạn (15 phút) | Từ chối, yêu cầu đăng ký lại | `SEAT_HOLD_EXPIRED` | 400 |
-| Refund gateway lỗi | Retry 3 lần qua BullMQ, nếu vẫn lỗi → alert ORGANIZER | `REFUND_FAILED` | 500 |
+| Seat hold đã hết hạn | Từ chối | `SEAT_HOLD_EXPIRED` | 400 |
+| Registration không tồn tại | Từ chối | `REGISTRATION_NOT_FOUND` | 404 |
+| Payment không tồn tại | Từ chối | `PAYMENT_NOT_FOUND` | 404 |
+| Thiếu Idempotency Key header | Từ chối (IdempotencyInterceptor) | `MISSING_IDEMPOTENCY_KEY` | 400 |
 
 ## Ràng buộc
 
-### Circuit Breaker
-- **Threshold mở**: 5 lỗi liên tiếp trong 30 giây.
-- **Reset timeout**: 60 giây ở OPEN trước khi thử HALF_OPEN.
+### Circuit Breaker (In-memory)
+- **Threshold mở**: 5 lỗi liên tiếp trong 30 giây (`FAILURE_THRESHOLD=5`, `FAILURE_WINDOW_MS=30000`).
+- **Reset timeout**: 60 giây (`RESET_TIMEOUT_MS=60000`).
 - **Isolation**: Chỉ ảnh hưởng payment, không ảnh hưởng module khác.
+- Trạng thái lưu in-memory (reset khi restart app).
 
-### Idempotency Key
-- Format: UUID v4, gửi qua header `Idempotency-Key`.
+### Idempotency Key (Redis via Interceptor)
+- Xử lý bằng `IdempotencyInterceptor` (NestJS interceptor).
+- Key từ header `Idempotency-Key`.
 - Lưu trữ: Redis, TTL = **24 giờ**.
-- Value: serialized response (status + body).
-- Mỗi request payment **bắt buộc** có Idempotency Key, thiếu → 400.
+- Thiếu header → 400.
+- Database unique constraint trên `payments.idempotency_key` làm safety net.
 
 ### Payment Provider Interface
-```
-interface PaymentProvider {
+```typescript
+interface IPaymentProvider {
   processPayment(amount: number, metadata: PaymentMetadata): Promise<PaymentResult>;
   refund(transactionId: string, amount: number): Promise<RefundResult>;
-  getStatus(transactionId: string): Promise<PaymentStatus>;
+  getStatus(transactionId: string): Promise<PaymentStatusResult>;
 }
 ```
-- `MockPaymentProvider` implement interface này cho development.
-- Swap sang VNPay/Momo = tạo class mới implement cùng interface (**OCP**).
-
-### Hiệu năng
-- Payment respond < **3 giây** (bao gồm gateway call).
-- Idempotency check < **10ms** (Redis lookup).
+- `MockPaymentProvider` implement interface cho development (simulate 100ms delay).
+- Swap sang VNPay/Momo = tạo class mới, đổi DI binding trong `PaymentModule` (**OCP + LSP**).
+- DI token: `PAYMENT_PROVIDER`.
 
 ## Tiêu chí chấp nhận
 
-- [ ] SV thanh toán thành công → registration CONFIRMED, nhận QR code.
-- [ ] Client retry với cùng Idempotency Key → nhận cached response, tiền không bị trừ lần 2.
-- [ ] Payment gateway lỗi 5 lần liên tiếp → CB OPEN → request mới bị reject 503.
-- [ ] Khi CB OPEN: xem workshop, đăng ký miễn phí vẫn hoạt động bình thường.
-- [ ] Sau 60 giây CB thử HALF_OPEN → nếu gateway OK → CB CLOSED.
-- [ ] Request thiếu Idempotency Key → 400.
-- [ ] Seat hold hết 15 phút → payment bị từ chối.
+- [x] SV thanh toán thành công → payment COMPLETED, registration CONFIRMED, nhận QR code.
+- [x] Client retry với cùng Idempotency Key → nhận cached response, tiền không bị trừ lần 2.
+- [x] Payment gateway lỗi 5 lần liên tiếp → CB OPEN → request mới bị reject 503.
+- [x] Khi CB OPEN: xem workshop, đăng ký miễn phí vẫn hoạt động bình thường.
+- [x] Sau 60 giây CB thử HALF_OPEN → nếu gateway OK → CB CLOSED.
+- [x] Seat hold hết 15 phút → payment bị từ chối (SEAT_HOLD_EXPIRED).
+- [x] ORGANIZER xem thống kê thanh toán.
 
 ## API Contract
 
 ### POST /payments
 
+**Guards:** `JwtAuthGuard`, `RolesGuard` — `@Roles(STUDENT)`
+**Interceptor:** `IdempotencyInterceptor`
+
 **Headers:**
-- `Authorization: Bearer <accessToken>` (STUDENT)
+- `Authorization: Bearer <accessToken>`
 - `Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000`
 
 ```json
@@ -123,14 +129,12 @@ interface PaymentProvider {
 // Response 200
 { "success": true,
   "data": {
-    "id": "uuid",
-    "registrationId": "uuid",
-    "amount": 50000,
-    "currency": "VND",
-    "status": "COMPLETED",
-    "transactionId": "mock_txn_123",
-    "paidAt": "2026-04-22T07:05:00Z"
-  }
+    "id": "uuid", "registrationId": "uuid",
+    "amount": 50000, "currency": "VND",
+    "status": "COMPLETED", "transactionId": "mock_txn_123",
+    "paidAt": "ISO8601", "qrCode": "eyJ..."
+  },
+  "meta": { "timestamp": "ISO8601" }
 }
 
 // Response 503 (CB OPEN)
@@ -140,28 +144,30 @@ interface PaymentProvider {
 }
 ```
 
-### GET /payments/:registrationId
+### GET /payments/:registrationId (STUDENT)
+
+**Guards:** `JwtAuthGuard`, `RolesGuard` — `@Roles(STUDENT)`
 
 ```json
-// Response 200
 { "success": true,
   "data": {
     "id": "uuid", "amount": 50000, "status": "COMPLETED",
     "transactionId": "mock_txn_123", "paidAt": "..."
-  }
+  },
+  "meta": { "timestamp": "ISO8601" }
 }
 ```
 
 ### GET /payments/stats (ORGANIZER)
 
+**Guards:** `JwtAuthGuard`, `RolesGuard` — `@Roles(ORGANIZER)`
+
 ```json
-// Response 200
 { "success": true,
   "data": {
-    "totalRevenue": 2500000,
-    "totalTransactions": 50,
-    "completedPayments": 48,
-    "refundedPayments": 2
-  }
+    "totalRevenue": 2500000, "totalTransactions": 50,
+    "completedPayments": 48, "refundedPayments": 2
+  },
+  "meta": { "timestamp": "ISO8601" }
 }
 ```
