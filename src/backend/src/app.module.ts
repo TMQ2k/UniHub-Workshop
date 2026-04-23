@@ -12,6 +12,7 @@ import { WorkshopModule } from './modules/workshop/workshop.module.js';
 import { AiSummaryModule } from './modules/ai-summary/ai-summary.module.js';
 import { RegistrationModule } from './modules/registration/registration.module.js';
 import { PaymentModule } from './modules/payment/payment.module.js';
+import { CheckinModule } from './modules/checkin/checkin.module.js';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { PaymentModule } from './modules/payment/payment.module.js';
     AiSummaryModule,
     RegistrationModule,
     PaymentModule,
+    CheckinModule,
   ],
   controllers: [AppController],
   providers: [AppService],
