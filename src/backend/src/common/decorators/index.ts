@@ -1,1 +1,2 @@
-export { Roles, ROLES_KEY } from './roles.decorator.js';
+export { Roles } from './roles.decorator.js';
+export { RateLimit } from './rate-limit.decorator.js';

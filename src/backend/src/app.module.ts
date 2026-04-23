@@ -8,6 +8,8 @@ import { AppService } from './app.service.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { NotificationModule } from './modules/notification/notification.module.js';
 import { CsvSyncModule } from './modules/csv-sync/csv-sync.module.js';
+import { WorkshopModule } from './modules/workshop/workshop.module.js';
+import { AiSummaryModule } from './modules/ai-summary/ai-summary.module.js';
 
 @Module({
   imports: [
@@ -54,6 +56,8 @@ import { CsvSyncModule } from './modules/csv-sync/csv-sync.module.js';
     AuthModule,
     NotificationModule,
     CsvSyncModule,
+    WorkshopModule,
+    AiSummaryModule,
   ],
   controllers: [AppController],
   providers: [AppService],
