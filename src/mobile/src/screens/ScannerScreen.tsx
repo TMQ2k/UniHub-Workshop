@@ -1,27 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   TouchableOpacity,
-  Alert,
   Platform,
+  ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useNetwork } from '../contexts/NetworkContext';
 import { useCheckInQueue } from '../contexts/CheckInQueueContext';
+import { useAuth } from '../contexts/AuthContext';
 import { syncCheckIns } from '../services/api';
-
-/** Placeholder workshop ID — in production, selected from a list. */
-const PLACEHOLDER_WORKSHOP_ID = '00000000-0000-0000-0000-000000000000';
-const PLACEHOLDER_TOKEN = '__CHECKIN_STAFF_TOKEN__';
+import { API_BASE_URL } from '../constants';
 
 /**
- * ScannerScreen — Camera-based QR scanner for check-in staff.
+ * ScannerScreen — Camera-based QR scanner for check-in staff (native).
  *
- * Behaviour:
- * - Online  → POST directly to /checkins/sync and show ✅.
- * - Offline → Save to AsyncStorage queue and show ⏳.
+ * Flow:
+ * 1. Staff selects a workshop from the list
+ * 2. Scans student QR code (base64 JSON)
+ * 3. Decodes → validates workshopId → syncs check-in
+ * 4. Offline → enqueues to AsyncStorage for later sync
  */
 export default function ScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -31,18 +32,138 @@ export default function ScannerScreen() {
     message: string;
   } | null>(null);
 
+  // Workshop selection
+  const [workshops, setWorkshops] = useState<any[]>([]);
+  const [selectedWorkshop, setSelectedWorkshop] = useState<any | null>(null);
+  const [loadingWorkshops, setLoadingWorkshops] = useState(true);
+
   const { isConnected } = useNetwork();
   const { addToQueue, pendingCount, refreshQueue } = useCheckInQueue();
+  const { accessToken, logout, userName } = useAuth();
 
   // Load queue on mount
   useEffect(() => {
     refreshQueue();
   }, [refreshQueue]);
 
-  // ─── Permission handling ─────────────────────────────
+  // Fetch workshops
+  useEffect(() => {
+    const fetchWorkshops = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/workshops?page=1&limit=50`, {
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        });
+        const json = await res.json();
+        const list = json.data || [];
+        setWorkshops(list);
+        if (list.length > 0) setSelectedWorkshop(list[0]);
+      } catch (err) {
+        console.warn('Failed to fetch workshops:', err);
+      } finally {
+        setLoadingWorkshops(false);
+      }
+    };
+    fetchWorkshops();
+  }, [accessToken]);
+
+  // ── Decode base64 QR payload ─────────────────────────────
+  const decodeQR = useCallback((raw: string): { registrationId: string; workshopId: string } | null => {
+    try {
+      // Try base64 decode
+      const decoded = atob(raw);
+      const parsed = JSON.parse(decoded);
+      if (parsed.registrationId && parsed.workshopId) {
+        return { registrationId: parsed.registrationId, workshopId: parsed.workshopId };
+      }
+    } catch {
+      // Not base64 — try direct JSON
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed.registrationId && parsed.workshopId) {
+          return { registrationId: parsed.registrationId, workshopId: parsed.workshopId };
+        }
+      } catch {
+        // Not JSON either — treat raw string as registrationId
+      }
+    }
+    return null;
+  }, []);
+
+  // ─── QR scanned handler ──────────────────────────────────
+  const handleBarcodeScanned = async ({ data }: { type: string; data: string }) => {
+    if (scanned) return;
+    setScanned(true);
+
+    if (!selectedWorkshop) {
+      setLastResult({ type: 'error', message: '❌ Chưa chọn workshop!' });
+      return;
+    }
+
+    if (!accessToken) {
+      setLastResult({ type: 'error', message: '❌ Chưa đăng nhập!' });
+      return;
+    }
+
+    const scannedAt = new Date().toISOString();
+
+    // Decode QR
+    const decoded = decodeQR(data);
+    if (!decoded) {
+      setLastResult({ type: 'error', message: '❌ QR code không hợp lệ!' });
+      return;
+    }
+
+    // Validate workshop match
+    if (decoded.workshopId !== selectedWorkshop.id) {
+      setLastResult({
+        type: 'error',
+        message: '❌ QR này không thuộc workshop đang chọn!',
+      });
+      return;
+    }
+
+    // Use decoded registrationId (UUID) — NOT the raw QR string
+    const registrationId = decoded.registrationId;
+
+    if (!isConnected) {
+      // ── OFFLINE: enqueue ──────────────
+      await addToQueue({
+        studentQR: registrationId,
+        workshopId: selectedWorkshop.id,
+        scannedAt,
+      });
+      setLastResult({ type: 'pending', message: '⏳ Đã lưu offline — chờ đồng bộ' });
+    } else {
+      // ── ONLINE: sync immediately ──────
+      try {
+        const { status, body } = await syncCheckIns(
+          [{ studentQR: registrationId, workshopId: selectedWorkshop.id, scannedAt, syncStatus: 'pending' }],
+          accessToken,
+        );
+
+        if (status === 200 && body.success) {
+          const result = body.data?.results?.[0];
+          if (result?.status === 'error') {
+            setLastResult({ type: 'error', message: `❌ ${result.reason}` });
+          } else {
+            setLastResult({ type: 'success', message: '✅ Check-in thành công!' });
+          }
+        } else {
+          await addToQueue({ studentQR: registrationId, workshopId: selectedWorkshop.id, scannedAt });
+          setLastResult({ type: 'error', message: '❌ Lỗi server — đã lưu offline.' });
+        }
+      } catch {
+        await addToQueue({ studentQR: registrationId, workshopId: selectedWorkshop.id, scannedAt });
+        setLastResult({ type: 'pending', message: '⏳ Lỗi mạng — đã lưu offline.' });
+      }
+    }
+  };
+
+  // ── Permission handling ─────────────────────────────────
   if (!permission) {
     return (
       <View style={styles.container}>
+        <ActivityIndicator size="large" color="#6366F1" />
         <Text style={styles.message}>Đang kiểm tra quyền camera…</Text>
       </View>
     );
@@ -61,97 +182,75 @@ export default function ScannerScreen() {
     );
   }
 
-  // ─── QR scanned handler ──────────────────────────────
-  const handleBarcodeScanned = async ({
-    data,
-  }: {
-    type: string;
-    data: string;
-  }) => {
-    if (scanned) return; // debounce
-    setScanned(true);
+  // ── Loading workshops ───────────────────────────────────
+  if (loadingWorkshops) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#6366F1" />
+        <Text style={styles.message}>Đang tải danh sách workshop…</Text>
+      </View>
+    );
+  }
 
-    const scannedAt = new Date().toISOString();
-    const studentQR = data; // raw QR payload
+  // ── Workshop selector ───────────────────────────────────
+  if (!selectedWorkshop) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.message}>Không tìm thấy workshop nào.</Text>
+        <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
+          <Text style={styles.logoutText}>Đăng xuất</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
-    if (!isConnected) {
-      // ── OFFLINE: enqueue to AsyncStorage ──────────
-      await addToQueue({
-        studentQR,
-        workshopId: PLACEHOLDER_WORKSHOP_ID,
-        scannedAt,
-      });
-
-      setLastResult({
-        type: 'pending',
-        message: `⏳ Đã ghi nhận (chờ đồng bộ)`,
-      });
-    } else {
-      // ── ONLINE: send directly ─────────────────────
-      try {
-        const { status, body } = await syncCheckIns(
-          [
-            {
-              studentQR,
-              workshopId: PLACEHOLDER_WORKSHOP_ID,
-              scannedAt,
-              syncStatus: 'pending',
-            },
-          ],
-          PLACEHOLDER_TOKEN,
-        );
-
-        if (status === 200 && body.success) {
-          setLastResult({
-            type: 'success',
-            message: `✅ Check-in thành công!`,
-          });
-        } else {
-          // Server returned an error — still save locally
-          await addToQueue({
-            studentQR,
-            workshopId: PLACEHOLDER_WORKSHOP_ID,
-            scannedAt,
-          });
-          setLastResult({
-            type: 'error',
-            message: `❌ Lỗi server — đã lưu offline.`,
-          });
-        }
-      } catch {
-        // Network error despite isConnected = true (race condition)
-        await addToQueue({
-          studentQR,
-          workshopId: PLACEHOLDER_WORKSHOP_ID,
-          scannedAt,
-        });
-        setLastResult({
-          type: 'pending',
-          message: `⏳ Lỗi mạng — đã lưu offline.`,
-        });
-      }
-    }
-  };
-
-  // ─── UI ──────────────────────────────────────────────
+  // ── Main Scanner UI ─────────────────────────────────────
   return (
     <View style={styles.container}>
-      {/* Status bar */}
-      <View style={styles.statusBar}>
-        <View
-          style={[
-            styles.networkDot,
-            { backgroundColor: isConnected ? '#34D399' : '#F87171' },
-          ]}
-        />
-        <Text style={styles.statusText}>
-          {isConnected ? 'Online' : 'Offline'}
-        </Text>
-        {pendingCount > 0 && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{pendingCount}</Text>
-          </View>
-        )}
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.staffName}>📱 {userName}</Text>
+          <TouchableOpacity onPress={logout}>
+            <Text style={styles.logoutText}>Đăng xuất</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.headerRight}>
+          <View style={[styles.networkDot, { backgroundColor: isConnected ? '#34D399' : '#F87171' }]} />
+          <Text style={styles.statusText}>{isConnected ? 'Online' : 'Offline'}</Text>
+          {pendingCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{pendingCount}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Workshop selector */}
+      <View style={styles.workshopBar}>
+        <Text style={styles.workshopLabel}>Workshop:</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.workshopScroll}>
+          {workshops.map((w) => (
+            <TouchableOpacity
+              key={w.id}
+              onPress={() => setSelectedWorkshop(w)}
+              style={[
+                styles.workshopChip,
+                selectedWorkshop?.id === w.id && styles.workshopChipActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.workshopChipText,
+                  selectedWorkshop?.id === w.id && styles.workshopChipTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {w.title}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       {/* Camera */}
@@ -160,8 +259,9 @@ export default function ScannerScreen() {
         barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
         onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
       >
-        {/* Scanner overlay */}
         <View style={styles.overlay}>
+          <Text style={styles.scanLabel}>Quét QR sinh viên</Text>
+          <Text style={styles.scanSubLabel}>{selectedWorkshop.title}</Text>
           <View style={styles.scanArea} />
         </View>
       </CameraView>
@@ -183,13 +283,13 @@ export default function ScannerScreen() {
       {/* Scan again button */}
       {scanned && (
         <TouchableOpacity
-          style={styles.button}
+          style={styles.scanAgainBtn}
           onPress={() => {
             setScanned(false);
             setLastResult(null);
           }}
         >
-          <Text style={styles.buttonText}>Quét lại</Text>
+          <Text style={styles.buttonText}>🔄 Quét lại</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -209,17 +309,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     paddingHorizontal: 24,
-    marginBottom: 16,
+    marginTop: 16,
   },
-  statusBar: {
+  header: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 40,
+    top: Platform.OS === 'ios' ? 50 : 30,
     left: 0,
     right: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    zIndex: 20,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  staffName: {
+    color: '#E2E8F0',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  logoutBtn: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  logoutText: {
+    color: '#F87171',
+    fontSize: 12,
+    fontWeight: '600',
   },
   networkDot: {
     width: 10,
@@ -247,6 +373,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  workshopBar: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 90 : 70,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    zIndex: 15,
+  },
+  workshopLabel: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
+    marginRight: 8,
+  },
+  workshopScroll: {
+    flexGrow: 0,
+  },
+  workshopChip: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    marginRight: 8,
+  },
+  workshopChipActive: {
+    backgroundColor: '#6366F1',
+  },
+  workshopChipText: {
+    color: '#CBD5E1',
+    fontSize: 12,
+    fontWeight: '500',
+    maxWidth: 150,
+  },
+  workshopChipTextActive: {
+    color: '#FFF',
+    fontWeight: '700',
+  },
   camera: {
     flex: 1,
     width: '100%',
@@ -256,6 +421,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  scanLabel: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  scanSubLabel: {
+    color: '#A5B4FC',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 20,
   },
   scanArea: {
     width: 250,
@@ -284,6 +461,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   button: {
+    backgroundColor: '#6366F1',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  scanAgainBtn: {
     position: 'absolute',
     bottom: 60,
     backgroundColor: '#6366F1',

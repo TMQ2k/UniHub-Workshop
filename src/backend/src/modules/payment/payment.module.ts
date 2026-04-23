@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Payment } from './entities/payment.entity.js';
 import { Registration } from '../registration/entities/registration.entity.js';
 import { Workshop } from '../workshop/entities/workshop.entity.js';
+import { User } from '../auth/entities/user.entity.js';
 import { PaymentService } from './payment.service.js';
 import { PaymentController } from './payment.controller.js';
 import { MockPaymentProvider } from './providers/mock-payment.provider.js';
@@ -23,7 +24,7 @@ import { NotificationModule } from '../notification/notification.module.js';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, Registration, Workshop]),
+    TypeOrmModule.forFeature([Payment, Registration, Workshop, User]),
     RegistrationModule,
     NotificationModule,
   ],

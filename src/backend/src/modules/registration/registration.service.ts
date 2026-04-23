@@ -12,6 +12,7 @@ import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { Registration, RegistrationStatus } from './entities/registration.entity.js';
 import { Workshop, WorkshopStatus } from '../workshop/entities/workshop.entity.js';
+import { User } from '../auth/entities/user.entity.js';
 import { NotificationService } from '../notification/notification.service.js';
 
 /** Duration to hold a seat for paid workshops (in minutes) */
@@ -29,6 +30,8 @@ export class RegistrationService {
     private readonly registrationRepo: Repository<Registration>,
     @InjectRepository(Workshop)
     private readonly workshopRepo: Repository<Workshop>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly dataSource: DataSource,
     private readonly configService: ConfigService,
     private readonly notificationService: NotificationService,
@@ -176,9 +179,38 @@ export class RegistrationService {
       registration.studentId,
       studentEmail,
       'REGISTRATION_CONFIRMED',
-      'Đăng ký workshop thành công',
-      `Bạn đã đăng ký thành công workshop "${workshopTitle}".`,
-      { registrationId: registration.id, workshopId: registration.workshopId },
+      `✅ Đăng ký thành công: ${workshopTitle}`,
+      `Chúc mừng! Bạn đã đăng ký thành công workshop "${workshopTitle}".\n\nVui lòng mang mã QR bên dưới đến workshop để nhân viên quét xác nhận tham gia.`,
+      {
+        registrationId: registration.id,
+        workshopId: registration.workshopId,
+        workshopTitle,
+        qrCode: registration.qrCode, // Email channel uses this to generate QR image
+      },
+    );
+  }
+
+  /**
+   * Fetch student email & workshop title, then send notification.
+   * Used by the controller as fire-and-forget after registration.
+   */
+  async notifyRegistrationConfirmedById(registrationId: string): Promise<void> {
+    const registration = await this.registrationRepo.findOne({
+      where: { id: registrationId },
+    });
+    if (!registration) return;
+
+    const [user, workshop] = await Promise.all([
+      this.userRepo.findOne({ where: { id: registration.studentId } }),
+      this.workshopRepo.findOne({ where: { id: registration.workshopId } }),
+    ]);
+
+    if (!user || !workshop) return;
+
+    await this.notifyRegistrationConfirmed(
+      registration,
+      user.email,
+      workshop.title,
     );
   }
 

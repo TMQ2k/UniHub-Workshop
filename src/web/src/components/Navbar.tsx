@@ -8,6 +8,8 @@ export default function Navbar() {
   const { user, loading, logout, isOrganizer } = useAuth();
   const router = useRouter();
 
+  const isStaff = user?.role === 'CHECKIN_STAFF';
+
   const handleLogout = async () => {
     await logout();
     router.push('/');
@@ -26,12 +28,15 @@ export default function Navbar() {
 
         {/* Nav links */}
         <div className="flex items-center gap-6">
-          <Link
-            href="/"
-            className="text-sm font-medium text-gray-300 transition-colors hover:text-white"
-          >
-            Workshops
-          </Link>
+          {/* Staff cannot see Workshops list or Dashboard */}
+          {!isStaff && (
+            <Link
+              href="/"
+              className="text-sm font-medium text-gray-300 transition-colors hover:text-white"
+            >
+              Workshops
+            </Link>
+          )}
 
           {!loading && (
             <>
@@ -47,8 +52,13 @@ export default function Navbar() {
               {user ? (
                 <div className="flex items-center gap-4">
                   <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-gray-300">
-                    {user.role === 'ORGANIZER' ? '🛡️' : '🎓'} {user.name || user.studentId}
+                    {user.role === 'ORGANIZER' ? '🛡️' : user.role === 'CHECKIN_STAFF' ? '📱' : '🎓'} {user.name || user.studentId}
                   </span>
+                  {isStaff && (
+                    <span className="rounded-full bg-amber-500/20 px-3 py-1 text-xs font-medium text-amber-400">
+                      Dùng app mobile để quét QR
+                    </span>
+                  )}
                   <button
                     onClick={handleLogout}
                     className="rounded-lg bg-white/10 px-3 py-1.5 text-sm font-medium text-gray-300 transition-colors hover:bg-white/20 hover:text-white"
@@ -57,12 +67,20 @@ export default function Navbar() {
                   </button>
                 </div>
               ) : (
-                <Link
-                  href="/login"
-                  className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500"
-                >
-                  Đăng nhập
-                </Link>
+                <div className="flex items-center gap-3">
+                  <Link
+                    href="/login"
+                    className="rounded-lg bg-white/10 px-4 py-1.5 text-sm font-medium text-gray-300 transition-colors hover:bg-white/20 hover:text-white"
+                  >
+                    Đăng nhập
+                  </Link>
+                  <Link
+                    href="/register"
+                    className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500"
+                  >
+                    Đăng ký
+                  </Link>
+                </div>
               )}
             </>
           )}

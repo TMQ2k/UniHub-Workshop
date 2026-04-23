@@ -6,7 +6,12 @@ export const MAX_PENDING_RECORDS = 500;
 
 /**
  * Base URL of the backend API.
- * In a real deployment this would come from an env config;
- * kept here as a named constant (no magic strings).
+ * 
+ * ⚠️ Use your computer's LAN IP (not localhost) for Expo Go on real phones.
+ *    Find your IP: `ipconfig` (Windows) or `ifconfig` (Mac/Linux)
+ *    Replace the IP below with yours if different.
+ * 
+ * For web testing: 'http://localhost:3000/api'
+ * For real phone: 'http://<YOUR_LAN_IP>:3000/api'
  */
-export const API_BASE_URL = 'http://localhost:3000';
+export const API_BASE_URL = 'http://192.168.1.15:3000/api';

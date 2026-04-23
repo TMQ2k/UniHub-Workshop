@@ -1,6 +1,3 @@
-student_id,full_name,email,faculty,enrollment_year
-21127001,Nguyễn Văn A,21127001@student.hcmus.edu.vn,CNTT,2021
-21127002,Trần Thị B,21127002@student.hcmus.edu.vn,CNTT,2021
-21127003,Lê Văn C,21127003@student.hcmus.edu.vn,Toán - Tin,2021
-21127004,Phạm Thị D,21127004@student.hcmus.edu.vn,Vật lý,2022
-21127005,Hoàng Văn E,21127005@student.hcmus.edu.vn,CNTT,2022
+﻿student_id,full_name,email,faculty,enrollment_year
+SV002,Pham Thi C,phamthic@unihub.edu.vn,Kinh te,2024
+SV003,Hoang Van D,hoangvand@unihub.edu.vn,Cong nghe Thong tin,2023

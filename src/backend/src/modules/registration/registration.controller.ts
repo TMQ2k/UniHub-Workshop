@@ -49,7 +49,7 @@ export class RegistrationController {
     if (registration.status === 'CONFIRMED') {
       // Fire-and-forget — SRP: notification is async, not blocking the response
       this.registrationService
-        .notifyRegistrationConfirmed(registration, req.user.email, '')
+        .notifyRegistrationConfirmedById(registration.id)
         .catch(() => {});
     }
 

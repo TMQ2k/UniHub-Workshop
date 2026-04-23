@@ -158,8 +158,15 @@ export class WorkshopService {
   async findAll(query: QueryWorkshopDto) {
     const qb = this.workshopRepo.createQueryBuilder('w');
 
-    // Only show PUBLISHED workshops in public listing
-    qb.where('w.status = :status', { status: WorkshopStatus.PUBLISHED });
+    // Filter by status: 'all' = no status filter, specific = filter by that status, default = PUBLISHED only
+    if (query.status === 'all') {
+      // No status filter — show all workshops (for organizer dashboard)
+    } else if (query.status && Object.values(WorkshopStatus).includes(query.status as WorkshopStatus)) {
+      qb.where('w.status = :status', { status: query.status });
+    } else {
+      // Default: Only show PUBLISHED workshops in public listing
+      qb.where('w.status = :status', { status: WorkshopStatus.PUBLISHED });
+    }
 
     // Filter by date
     if (query.date) {

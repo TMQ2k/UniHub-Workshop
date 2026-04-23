@@ -1,18 +1,19 @@
 'use client';
 
-import { useState, useRef, use } from 'react';
+import { useState, useRef, use, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { apiFetch, ApiRequestError } from '@/lib/api';
 import ErrorAlert, { SuccessAlert } from '@/components/ErrorAlert';
+import { QRCodeSVG } from 'qrcode.react';
 import type { Registration, Payment } from '@/lib/types';
 
 // ============================================================
 // Registration + Payment Flow
 //
 // 1. POST /registrations { workshopId }
-// 2. If free → CONFIRMED, show QR
+// 2. If free → CONFIRMED, show QR code IMAGE
 // 3. If paid → PENDING_PAYMENT → auto-generate Idempotency-Key
 //    → POST /payments { registrationId } with Idempotency-Key header
 // ============================================================
@@ -107,6 +108,32 @@ export default function RegisterPage({
     }
   };
 
+  // ── Download QR Code as PNG ───────────────────────────────
+  const downloadQR = useCallback(() => {
+    const svgEl = document.querySelector('#qr-code-svg svg') as SVGSVGElement | null;
+    if (!svgEl) return;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const svgData = new XMLSerializer().serializeToString(svgEl);
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.width * 2;
+      canvas.height = img.height * 2;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      const link = document.createElement('a');
+      link.download = `qr-checkin-${registration?.id?.substring(0, 8)}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    };
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+  }, [registration]);
+
   // ── Auth guard ────────────────────────────────────────────
   if (authLoading) {
     return (
@@ -185,17 +212,33 @@ export default function RegisterPage({
           </div>
         )}
 
-        {/* ── Step: Free registration success ────────────── */}
+        {/* ── Step: Free registration success — QR CODE IMAGE ── */}
         {step === 'registered_free' && registration && (
           <div className="space-y-4">
             <SuccessAlert message="Đăng ký thành công! Bạn đã có chỗ." />
 
             {registration.qrCode && (
-              <div className="rounded-xl border border-white/10 bg-gray-800 p-4">
-                <p className="mb-2 text-xs font-medium text-gray-500 uppercase">Mã QR Check-in</p>
-                <div className="overflow-x-auto rounded-lg bg-gray-950 p-3 font-mono text-xs text-indigo-300">
-                  {registration.qrCode}
+              <div className="rounded-xl border border-white/10 bg-white p-6 text-center">
+                <p className="mb-3 text-sm font-semibold text-gray-700">Mã QR Check-in</p>
+                <div id="qr-code-svg" className="flex justify-center">
+                  <QRCodeSVG
+                    value={registration.qrCode}
+                    size={200}
+                    level="H"
+                    includeMargin
+                    bgColor="#ffffff"
+                    fgColor="#1e1b4b"
+                  />
                 </div>
+                <p className="mt-3 text-xs text-gray-500">
+                  Đưa mã QR này cho nhân viên quét khi đến workshop
+                </p>
+                <button
+                  onClick={downloadQR}
+                  className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+                >
+                  📥 Tải QR code
+                </button>
               </div>
             )}
 

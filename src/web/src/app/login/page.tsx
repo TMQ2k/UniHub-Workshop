@@ -26,6 +26,8 @@ export default function LoginPage() {
     } catch (err) {
       if (err instanceof ApiRequestError) {
         setError({ code: err.code, message: err.message });
+      } else if (err instanceof Error) {
+        setError({ message: err.message });
       } else {
         setError({ message: 'Đã có lỗi xảy ra. Vui lòng thử lại.' });
       }
@@ -90,8 +92,14 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="mt-5 text-center text-xs text-gray-500">
-            Tài khoản test: <code className="text-gray-400">ADMIN001</code> / <code className="text-gray-400">Admin@123</code>
+          <p className="mt-5 text-center text-sm text-gray-500">
+            Chưa có tài khoản?{' '}
+            <a href="/register" className="text-indigo-400 hover:text-indigo-300">
+              Đăng ký tại đây
+            </a>
+          </p>
+          <p className="mt-2 text-center text-xs text-gray-600">
+            Test: <code className="text-gray-500">ADMIN001</code> / <code className="text-gray-500">Admin@123</code>
           </p>
         </div>
       </div>

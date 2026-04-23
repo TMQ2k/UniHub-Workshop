@@ -2,15 +2,18 @@ import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NetworkProvider } from './src/contexts/NetworkContext';
 import { CheckInQueueProvider, useCheckInQueue } from './src/contexts/CheckInQueueContext';
+import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { useAutoSync } from './src/hooks/useAutoSync';
 import ScannerScreen from './src/screens/ScannerScreen';
+import LoginScreen from './src/screens/LoginScreen';
 
 /**
- * Inner component that consumes both contexts and activates auto-sync.
- * Separated from App so that hooks can access the providers above.
+ * Inner component that consumes all contexts.
+ * Shows LoginScreen if not authenticated, ScannerScreen if authenticated.
  */
 function AppContent() {
   const { refreshQueue } = useCheckInQueue();
+  const { isLoggedIn } = useAuth();
 
   // Activate background auto-sync
   useAutoSync();
@@ -23,7 +26,7 @@ function AppContent() {
   return (
     <>
       <StatusBar style="light" />
-      <ScannerScreen />
+      {isLoggedIn ? <ScannerScreen /> : <LoginScreen />}
     </>
   );
 }
@@ -34,10 +37,12 @@ function AppContent() {
  */
 export default function App() {
   return (
-    <NetworkProvider>
-      <CheckInQueueProvider>
-        <AppContent />
-      </CheckInQueueProvider>
-    </NetworkProvider>
+    <AuthProvider>
+      <NetworkProvider>
+        <CheckInQueueProvider>
+          <AppContent />
+        </CheckInQueueProvider>
+      </NetworkProvider>
+    </AuthProvider>
   );
 }

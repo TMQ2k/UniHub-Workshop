@@ -30,4 +30,8 @@ export class QueryWorkshopDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string; // 'DRAFT' | 'PUBLISHED' | 'CANCELLED' | 'all'
 }

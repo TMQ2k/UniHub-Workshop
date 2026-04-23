@@ -2,16 +2,17 @@ import {
   Injectable,
   UnauthorizedException,
   ForbiddenException,
+  ConflictException,
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, ILike } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import { User } from './entities/user.entity.js';
-import { LoginDto, RefreshTokenDto } from './dto/index.js';
+import { User, UserRole } from './entities/user.entity.js';
+import { LoginDto, RefreshTokenDto, RegisterDto } from './dto/index.js';
 
 const BCRYPT_SALT_ROUNDS = 10;
 
@@ -25,6 +26,100 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
   ) {}
+
+  // ──────────────────────────────────────────────────────────
+  // Register (Student self-registration)
+  // ──────────────────────────────────────────────────────────
+
+  async register(dto: RegisterDto) {
+    // Check duplicate email
+    const existingEmail = await this.userRepo.findOne({
+      where: { email: dto.email },
+    });
+    if (existingEmail) {
+      throw new ConflictException({
+        success: false,
+        error: { code: 'EMAIL_ALREADY_EXISTS', message: 'Email đã được sử dụng.' },
+      });
+    }
+
+    // Resolve studentId
+    let studentId = dto.studentId?.trim() || null;
+
+    if (studentId) {
+      // Check if provided studentId already exists
+      const existingId = await this.userRepo.findOne({
+        where: { studentId },
+      });
+      if (existingId) {
+        throw new ConflictException({
+          success: false,
+          error: { code: 'STUDENT_ID_EXISTS', message: 'Mã sinh viên đã tồn tại.' },
+        });
+      }
+    } else {
+      // Auto-generate studentId: SV + next number
+      studentId = await this.generateStudentId();
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_SALT_ROUNDS);
+
+    // Create user
+    const user = this.userRepo.create({
+      studentId,
+      fullName: dto.fullName,
+      email: dto.email,
+      passwordHash,
+      role: UserRole.STUDENT,
+    });
+    const saved = await this.userRepo.save(user);
+
+    // Generate tokens
+    const tokens = await this.generateTokens(saved);
+    await this.saveRefreshTokenHash(saved.id, tokens.refreshToken);
+
+    this.logger.log(`New student registered: ${saved.studentId} (${saved.email})`);
+
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: {
+        id: saved.id,
+        name: saved.fullName,
+        studentId: saved.studentId,
+        role: saved.role,
+      },
+    };
+  }
+
+  /** Auto-generate unique studentId in format SV### */
+  private async generateStudentId(): Promise<string> {
+    // Find the highest existing SV### id
+    const latestUser = await this.userRepo
+      .createQueryBuilder('u')
+      .where("u.student_id LIKE 'SV%'")
+      .orderBy('u.student_id', 'DESC')
+      .getOne();
+
+    let nextNum = 1;
+    if (latestUser?.studentId) {
+      const match = latestUser.studentId.match(/^SV(\d+)$/);
+      if (match) {
+        nextNum = parseInt(match[1], 10) + 1;
+      }
+    }
+
+    const newId = `SV${String(nextNum).padStart(3, '0')}`;
+
+    // Double-check uniqueness
+    const exists = await this.userRepo.findOne({ where: { studentId: newId } });
+    if (exists) {
+      return `SV${String(nextNum + 1).padStart(3, '0')}`;
+    }
+
+    return newId;
+  }
 
   // ──────────────────────────────────────────────────────────
   // Login

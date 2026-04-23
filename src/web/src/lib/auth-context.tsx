@@ -28,14 +28,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Hydrate from localStorage on mount
+  // Hydrate from localStorage on mount — reject staff sessions
   useEffect(() => {
     try {
       const storedToken = localStorage.getItem(STORAGE_KEY_TOKEN);
       const storedUser = localStorage.getItem(STORAGE_KEY_USER);
       if (storedToken && storedUser) {
-        setAccessToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        const parsed = JSON.parse(storedUser);
+        if (parsed.role === 'CHECKIN_STAFF') {
+          // Staff accounts are not allowed on web — clear stale session
+          localStorage.removeItem(STORAGE_KEY_TOKEN);
+          localStorage.removeItem(STORAGE_KEY_REFRESH);
+          localStorage.removeItem(STORAGE_KEY_USER);
+        } else {
+          setAccessToken(storedToken);
+          setUser(parsed);
+        }
       }
     } catch {
       // Ignore parse errors
@@ -48,6 +56,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: 'POST',
       body: JSON.stringify({ studentId, password }),
     });
+
+    // Block CHECKIN_STAFF from web — they must use the mobile app
+    if (data.user.role === 'CHECKIN_STAFF') {
+      // Revoke the token server-side (best-effort)
+      try {
+        await apiFetch('/auth/logout', { method: 'POST', token: data.accessToken });
+      } catch { /* ignore */ }
+      throw new Error('Tài khoản Staff chỉ được sử dụng trên ứng dụng mobile để quét QR. Vui lòng sử dụng Expo Go trên điện thoại.');
+    }
 
     setAccessToken(data.accessToken);
     setUser(data.user);

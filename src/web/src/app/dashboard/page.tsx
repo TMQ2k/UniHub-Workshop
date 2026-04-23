@@ -28,7 +28,7 @@ export default function DashboardPage() {
 
     try {
       // Fetch all workshops (the listing endpoint shows all to authenticated organizer)
-      const workshopData = await apiFetch<Workshop[]>('/workshops?page=1&limit=50', {
+      const workshopData = await apiFetch<Workshop[]>('/workshops?page=1&limit=50&status=all', {
         token: accessToken,
       });
       setWorkshops(Array.isArray(workshopData) ? workshopData : []);

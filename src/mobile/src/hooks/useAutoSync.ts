@@ -2,14 +2,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useNetwork } from '../contexts/NetworkContext';
 import { useCheckInQueue } from '../contexts/CheckInQueueContext';
+import { useAuth } from '../contexts/AuthContext';
 import { syncCheckIns } from '../services/api';
-
-/**
- * Placeholder access token.
- * In production, this would come from an AuthContext after
- * CHECKIN_STAFF logs in via JWT flow.
- */
-const PLACEHOLDER_TOKEN = '__CHECKIN_STAFF_TOKEN__';
 
 /**
  * useAutoSync — Background auto-sync hook.
@@ -18,17 +12,21 @@ const PLACEHOLDER_TOKEN = '__CHECKIN_STAFF_TOKEN__';
  * When the device regains connectivity and there are pending items
  * in the check-in queue, it automatically:
  *   1. Reads the pending queue from AsyncStorage (via context).
- *   2. POSTs to /checkins/sync.
+ *   2. POSTs to /checkins/sync using the real staff access token.
  *   3. If HTTP 200 → clears the queue from AsyncStorage.
  *   4. If non-200 → keeps the queue intact for retry.
  */
 export function useAutoSync(): void {
   const { isConnected } = useNetwork();
   const { queue, clearQueue, refreshQueue } = useCheckInQueue();
+  const { accessToken } = useAuth();
   const isSyncing = useRef(false);
   const prevConnected = useRef(isConnected);
 
   const performSync = useCallback(async () => {
+    // Guard: no token
+    if (!accessToken) return;
+
     // Guard: no pending items
     const pendingItems = queue.filter((i) => i.syncStatus === 'pending');
     if (pendingItems.length === 0) return;
@@ -41,7 +39,7 @@ export function useAutoSync(): void {
     try {
       const { status, body } = await syncCheckIns(
         pendingItems,
-        PLACEHOLDER_TOKEN,
+        accessToken,
       );
 
       if (status === 200) {
@@ -64,7 +62,7 @@ export function useAutoSync(): void {
       // Refresh in-memory state regardless of outcome
       await refreshQueue();
     }
-  }, [queue, clearQueue, refreshQueue]);
+  }, [queue, clearQueue, refreshQueue, accessToken]);
 
   useEffect(() => {
     // Detect transition from offline → online

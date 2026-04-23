@@ -12,6 +12,7 @@ import { Repository } from 'typeorm';
 import { Payment, PaymentStatus } from './entities/payment.entity.js';
 import { Registration, RegistrationStatus } from '../registration/entities/registration.entity.js';
 import { Workshop } from '../workshop/entities/workshop.entity.js';
+import { User } from '../auth/entities/user.entity.js';
 import type { IPaymentProvider, PaymentMetadata } from './interfaces/index.js';
 import { PAYMENT_PROVIDER } from './interfaces/index.js';
 import { CircuitBreaker, CircuitBreakerOpenError } from './circuit-breaker.js';
@@ -30,6 +31,8 @@ export class PaymentService {
     private readonly registrationRepo: Repository<Registration>,
     @InjectRepository(Workshop)
     private readonly workshopRepo: Repository<Workshop>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     @Inject(PAYMENT_PROVIDER)
     private readonly paymentProvider: IPaymentProvider,
     private readonly registrationService: RegistrationService,
@@ -129,15 +132,22 @@ export class PaymentService {
       // Step 7: Confirm registration (generates QR code)
       const confirmedRegistration = await this.registrationService.confirmPayment(registrationId);
 
-      // Step 8: Enqueue notification (async, non-blocking)
+      // Step 8: Enqueue notification with QR code (async, non-blocking)
+      // Look up student email from DB (JWT doesn't carry email)
+      const resolvedEmail = studentEmail || (await this.userRepo.findOne({ where: { id: studentId } }))?.email || '';
       this.notificationService
         .send(
           studentId,
-          studentEmail,
+          resolvedEmail,
           'PAYMENT_CONFIRMED',
-          'Thanh toán thành công',
-          `Bạn đã thanh toán thành công workshop "${workshop.title}". Mã QR đã được tạo.`,
-          { registrationId, paymentId: savedPayment.id },
+          `✅ Thanh toán thành công: ${workshop.title}`,
+          `Bạn đã thanh toán thành công workshop "${workshop.title}".\n\nVui lòng mang mã QR bên dưới đến workshop để nhân viên quét xác nhận tham gia.`,
+          {
+            registrationId,
+            paymentId: savedPayment.id,
+            workshopTitle: workshop.title,
+            qrCode: confirmedRegistration.qrCode, // Email channel embeds QR image
+          },
         )
         .catch(() => {});
 
