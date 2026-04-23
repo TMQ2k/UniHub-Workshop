@@ -10,6 +10,8 @@ import { NotificationModule } from './modules/notification/notification.module.j
 import { CsvSyncModule } from './modules/csv-sync/csv-sync.module.js';
 import { WorkshopModule } from './modules/workshop/workshop.module.js';
 import { AiSummaryModule } from './modules/ai-summary/ai-summary.module.js';
+import { RegistrationModule } from './modules/registration/registration.module.js';
+import { PaymentModule } from './modules/payment/payment.module.js';
 
 @Module({
   imports: [
@@ -58,6 +60,8 @@ import { AiSummaryModule } from './modules/ai-summary/ai-summary.module.js';
     CsvSyncModule,
     WorkshopModule,
     AiSummaryModule,
+    RegistrationModule,
+    PaymentModule,
   ],
   controllers: [AppController],
   providers: [AppService],
