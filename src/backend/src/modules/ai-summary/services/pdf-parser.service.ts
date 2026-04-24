@@ -16,7 +16,8 @@ export class PdfParserService {
 
   /**
    * Extract text from a PDF file on disk.
-   * Cleans the output by removing common artifacts.
+   * Preserves line breaks and tab characters for structured field extraction
+   * while cleaning common PDF artifacts.
    *
    * @param filePath - Absolute path to the PDF file
    * @returns Cleaned text content, truncated to MAX_TEXT_LENGTH if too long
@@ -55,16 +56,24 @@ export class PdfParserService {
 
   /**
    * Clean raw PDF text: remove headers/footers, page numbers,
-   * normalize whitespace.
+   * normalize whitespace while PRESERVING line breaks AND tabs.
+   *
+   * Tabs are critical: many PDFs use tab characters to separate
+   * labels from values (e.g. "Diễn giả\tCông Sỹ").
    */
   private cleanText(raw: string): string {
     return raw
       // Remove common page number patterns (e.g., "Page 1 of 10", "- 1 -")
       .replace(/page\s+\d+\s*(of\s+\d+)?/gi, '')
       .replace(/-\s*\d+\s*-/g, '')
-      // Normalize whitespace
-      .replace(/\s+/g, ' ')
+      // Remove pdf-parse page separator markers like "-- 1 of 3 --"
+      .replace(/--\s*\d+\s*of\s*\d+\s*--/g, '')
+      // Collapse multiple spaces on the same line, but keep \n and \t
+      .replace(/ {2,}/g, ' ')
+      // Collapse 3+ consecutive newlines into 2
       .replace(/\n{3,}/g, '\n\n')
+      // Remove leading/trailing whitespace on each line (but keep tabs intact within lines)
+      .replace(/^ +| +$/gm, '')
       .trim();
   }
 }

@@ -69,8 +69,8 @@ export class ParsePdfController {
     // Step 1: Extract text from PDF
     const text = await this.pdfParser.extractText(file.path);
 
-    // Step 2: Extract structured workshop fields from text
-    const fields = this.pdfExtract.extractWorkshopFields(text);
+    // Step 2: Extract structured workshop fields from text (AI-powered)
+    const fields = await this.pdfExtract.extractWorkshopFields(text);
 
     return {
       success: true,
