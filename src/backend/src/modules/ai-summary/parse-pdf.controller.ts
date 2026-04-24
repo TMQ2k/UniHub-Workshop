@@ -7,11 +7,14 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
+import { existsSync, mkdirSync } from 'fs';
 import { JwtAuthGuard, RolesGuard } from '../../common/guards/index.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import { UserRole } from '../auth/entities/user.entity.js';
@@ -20,6 +23,11 @@ import { PdfExtractService } from './services/pdf-extract.service.js';
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads', 'pdfs');
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+// Ensure upload directory exists on module load
+if (!existsSync(UPLOAD_DIR)) {
+  mkdirSync(UPLOAD_DIR, { recursive: true });
+}
 
 /**
  * ParsePdfController — Upload PDF and extract workshop fields.
@@ -30,6 +38,8 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
  */
 @Controller('workshops')
 export class ParsePdfController {
+  private readonly logger = new Logger(ParsePdfController.name);
+
   constructor(
     private readonly pdfParser: PdfParserService,
     private readonly pdfExtract: PdfExtractService,
@@ -66,18 +76,46 @@ export class ParsePdfController {
       });
     }
 
-    // Step 1: Extract text from PDF
-    const text = await this.pdfParser.extractText(file.path);
+    try {
+      // Step 1: Extract text from PDF
+      const text = await this.pdfParser.extractText(file.path);
 
-    // Step 2: Extract structured workshop fields from text (AI-powered)
-    const fields = await this.pdfExtract.extractWorkshopFields(text);
+      // Step 2: Extract structured workshop fields from text (AI-powered)
+      const fields = await this.pdfExtract.extractWorkshopFields(text);
 
-    return {
-      success: true,
-      data: {
-        extractedFields: fields,
-        rawTextPreview: text.substring(0, 500),
-      },
-    };
+      return {
+        success: true,
+        data: {
+          extractedFields: fields,
+          rawTextPreview: text.substring(0, 500),
+        },
+      };
+    } catch (error) {
+      const errorMsg =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`PDF parse failed: ${errorMsg}`);
+
+      // PDF text extraction failed
+      if (errorMsg.includes('PDF_PARSE_FAILED')) {
+        throw new BadRequestException({
+          success: false,
+          error: {
+            code: 'PDF_PARSE_FAILED',
+            message:
+              'Không thể đọc nội dung từ file PDF. Vui lòng kiểm tra file không bị hỏng hoặc được bảo vệ bằng mật khẩu.',
+          },
+        });
+      }
+
+      // Fallback: structured 500 that frontend can understand
+      throw new InternalServerErrorException({
+        success: false,
+        error: {
+          code: 'EXTRACT_FAILED',
+          message:
+            'Đã xảy ra lỗi khi phân tích PDF. Vui lòng thử lại.',
+        },
+      });
+    }
   }
 }
