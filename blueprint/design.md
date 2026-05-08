@@ -333,125 +333,147 @@ async create(@Body() dto: CreateWorkshopDto, @Request() req) { ... }
 ### Luồng 1 — Đăng ký workshop có phí (end-to-end)
 
 ```mermaid
-sequenceDiagram
-    actor SV as Sinh viên
-    participant WEB as Web App
-    participant API as Backend API
-    participant DB as PostgreSQL
-    participant RD as Redis
-    participant PAY as Payment Gateway
-    participant Q as BullMQ
+flowchart TD
+    A["🖱️ Sinh viên bấm Đăng ký"] --> B["POST /registrations"]
 
-    SV->>WEB: Bấm "Đăng ký"
-    WEB->>API: POST /registrations {workshopId}
+    subgraph RL ["⚡ Rate Limit Check"]
+        B --> C{"Token Bucket\n(Redis)\ncòn token?"}
+        C -- Hết --> C1["❌ 429 TOO_MANY_REQUESTS"]
+    end
 
-    Note over API,RD: Rate Limit Check (Token Bucket)
-    API->>RD: Check rate limit
-    RD-->>API: OK (tokens remaining)
+    subgraph TX ["🔒 Pessimistic Lock Transaction"]
+        C -- Còn --> D["BEGIN TRANSACTION"]
+        D --> E["SELECT ... FOR UPDATE\n(lock workshop row)"]
+        E --> F{"available_seats > 0?"}
+        F -- Không --> F1["❌ WORKSHOP_FULL\nROLLBACK"]
+        F -- Có --> G{"Đã đăng ký\nworkshop này?"}
+        G -- Rồi --> G1["❌ ALREADY_REGISTERED\nROLLBACK"]
+        G -- Chưa --> H{"Trùng lịch\nworkshop khác?"}
+        H -- Trùng --> H1["❌ SCHEDULE_CONFLICT\nROLLBACK"]
+        H -- Không --> I["UPDATE available_seats -= 1"]
+        I --> J["INSERT registration\nstatus = PENDING_PAYMENT"]
+        J --> K["COMMIT"]
+    end
 
-    Note over API,DB: Pessimistic Lock Transaction
-    API->>DB: BEGIN TRANSACTION
-    API->>DB: SELECT ... FOR UPDATE (workshop)
-    DB-->>API: workshop (availableSeats=5)
-    API->>API: Check seats > 0, no duplicate, no conflict
-    API->>DB: UPDATE availableSeats -= 1
-    API->>DB: INSERT registration (PENDING_PAYMENT)
-    API->>DB: COMMIT
+    K --> L["📄 Trả 201 + paymentUrl"]
+    L --> M["🖱️ SV xác nhận thanh toán"]
+    M --> N["POST /payments\n+ Idempotency-Key header"]
 
-    API-->>WEB: 201 {status: PENDING_PAYMENT, paymentUrl}
-    WEB-->>SV: Redirect sang trang thanh toán
+    subgraph IDEM ["🔑 Idempotency Check"]
+        N --> O{"Redis: key\nđã tồn tại?"}
+        O -- Có --> O1["↩️ Trả cached response\n(không xử lý lại)"]
+    end
 
-    SV->>WEB: Xác nhận thanh toán
-    WEB->>API: POST /payments {registrationId}<br/>Idempotency-Key: uuid
+    subgraph CB ["🔌 Circuit Breaker"]
+        O -- Chưa --> P{"CB state?"}
+        P -- OPEN --> P1["❌ 503 PAYMENT_UNAVAILABLE\n(không gọi gateway)"]
+        P -- CLOSED --> Q["💳 Gọi Payment Gateway"]
+        P -- HALF_OPEN --> Q
+        Q --> R{"Thanh toán\nthành công?"}
+        R -- Lỗi --> R1["Đếm lỗi → có thể chuyển OPEN"]
+        R -- Thành công --> S["UPDATE payment = COMPLETED"]
+    end
 
-    Note over API,RD: Idempotency Check
-    API->>RD: GET idempotency:{key}
-    RD-->>API: null (chưa có)
+    S --> T["UPDATE registration = CONFIRMED"]
+    T --> U["🔐 Generate QR Code\n(HMAC-SHA256 → Base64)"]
+    U --> V["SET idempotency:key → Redis\n(TTL 24h)"]
+    V --> W["📬 Enqueue notification\n(BullMQ)"]
+    W --> X["✅ Trả 200 + QR Code"]
+    X --> Y["📧 Email + 📱 App Push\nxác nhận đăng ký"]
 
-    Note over API,PAY: Circuit Breaker Check
-    API->>API: CB state = CLOSED
-    API->>PAY: processPayment(amount)
-    PAY-->>API: Success (txn_id)
-
-    API->>DB: UPDATE payment status=COMPLETED
-    API->>DB: UPDATE registration status=CONFIRMED
-    API->>API: Generate QR (HMAC-SHA256)
-    API->>RD: SET idempotency:{key} {response} EX 86400
-    API->>Q: Enqueue notification job
-
-    API-->>WEB: 200 {payment: COMPLETED, qrCode}
-    WEB-->>SV: Hiển thị QR code
-
-    Q->>Q: Process notification
-    Q->>SV: Email + App Push xác nhận
+    style RL fill:#1e293b,stroke:#6366f1,color:#fff
+    style TX fill:#1e293b,stroke:#f59e0b,color:#fff
+    style IDEM fill:#1e293b,stroke:#10b981,color:#fff
+    style CB fill:#1e293b,stroke:#ef4444,color:#fff
 ```
 
 ### Luồng 2 — Check-in offline và đồng bộ
 
 ```mermaid
-sequenceDiagram
-    actor ST as Staff
-    participant APP as Mobile App
-    participant STORE as AsyncStorage
-    participant API as Backend API
-    participant DB as PostgreSQL
+flowchart TD
+    A["📱 Staff mở Scanner Screen"] --> B["Chọn Workshop từ danh sách"]
+    B --> C["📷 Quét QR sinh viên"]
+    C --> D["Decode Base64 → JSON\n(registrationId, workshopId)"]
 
-    Note over ST,APP: Khu vực mất mạng
-    ST->>APP: Quét QR sinh viên
-    APP->>APP: Decode QR + Verify HMAC locally
-    APP->>APP: Network check → OFFLINE
+    D --> E{"QR hợp lệ?"}
+    E -- Không --> E1["❌ QR code không hợp lệ"]
+    E -- Có --> F{"workshopId khớp\nvới WS đang chọn?"}
+    F -- Không --> F1["❌ QR không thuộc\nworkshop này"]
+    F -- Có --> G{"📶 Có kết nối mạng?"}
 
-    APP->>STORE: Save PendingCheckIn<br/>{studentQR, workshopId, scannedAt, syncStatus: pending}
-    APP-->>ST: ⏳ "Đã ghi nhận (chờ đồng bộ)"
+    subgraph OFFLINE ["💾 Offline Mode"]
+        G -- Không --> H["Lưu vào AsyncStorage\n{studentQR, workshopId,\nscannedAt, syncStatus: pending}"]
+        H --> I["⏳ Hiển thị: Đã lưu offline"]
+        I --> J["Badge +1 pending"]
+        J --> K{"Mạng phục hồi?"}
+        K -- Chưa --> C
+        K -- Rồi --> L["Đọc toàn bộ pending queue\n(sorted by scannedAt ASC)"]
+    end
 
-    ST->>APP: Quét thêm QR khác
-    APP->>STORE: Save PendingCheckIn #2
-    APP-->>ST: ⏳ Badge: 2 pending
+    subgraph ONLINE ["🌐 Online Mode"]
+        G -- Có --> M["POST /checkins/sync\n(batch payload)"]
+        L --> M
+    end
 
-    Note over APP,API: Kết nối mạng phục hồi
-    APP->>APP: Network restored event
-    APP->>STORE: Read all pending (sorted by scannedAt)
+    subgraph BACKEND ["⚙️ Backend xử lý từng item"]
+        M --> N{"Registration\ntồn tại?"}
+        N -- Không --> N1["❌ REGISTRATION_NOT_FOUND"]
+        N -- Có --> O{"Status =\nCONFIRMED?"}
+        O -- Không --> O1["❌ NOT_CONFIRMED\nhoặc CANCELLED"]
+        O -- Có --> P{"workshopId\nkhớp?"}
+        P -- Không --> P1["❌ WORKSHOP_MISMATCH"]
+        P -- Có --> Q{"Đã check-in\ntrước đó?"}
+        Q -- Chưa --> R["✅ Tạo record check_ins"]
+        Q -- Rồi --> S{"incoming time\nsớm hơn?"}
+        S -- Không --> S1["❌ ALREADY_CHECKED_IN"]
+        S -- Có --> S2["✅ Overwrite\n(giữ lần quét sớm nhất)"]
+    end
 
-    APP->>API: POST /checkins/batch [{checkin1}, {checkin2}]
-    API->>DB: Process checkin1 → OK
-    API->>DB: Process checkin2 → OK
-    API-->>APP: {synced: 2, failed: 0}
+    R --> T["Trả kết quả:\nsynced / failed count"]
+    S2 --> T
+    T --> U["Xóa items đã synced\nkhỏi AsyncStorage"]
+    U --> V["✅ Hiển thị kết quả đồng bộ"]
 
-    APP->>STORE: Remove synced records
-    APP-->>ST: ✅ "Đồng bộ thành công: 2/2"
+    style OFFLINE fill:#1e293b,stroke:#f59e0b,color:#fff
+    style ONLINE fill:#1e293b,stroke:#6366f1,color:#fff
+    style BACKEND fill:#1e293b,stroke:#10b981,color:#fff
 ```
 
 ### Luồng 3 — Import CSV định kỳ (tạo tài khoản sinh viên)
 
 ```mermaid
-sequenceDiagram
-    participant CRON as Cron Job (15min)
-    participant Q as BullMQ Queue
-    participant WORKER as Queue Worker
-    participant FS as File System
-    participant DB as PostgreSQL
+flowchart TD
+    A["⏰ Cron Job kích hoạt\n(mỗi 15 phút)"] --> B["Scan thư mục /data/"]
 
-    CRON->>FS: Scan /data/sample-students.csv
-    FS-->>CRON: Found: sample-students.csv
-    CRON->>Q: Enqueue csv-import job
+    B --> C{"Tìm thấy\nfile CSV?"}
+    C -- Không --> C1["⏸️ Kết thúc\n(đợi lần tiếp theo)"]
+    C -- Có --> D["Enqueue csv-import job\nvào BullMQ"]
 
-    Q->>WORKER: Pick job
-    WORKER->>FS: Read CSV file
-    WORKER->>WORKER: Validate header columns
+    D --> E["Worker nhận job"]
+    E --> F["Đọc file CSV"]
+    F --> G{"Header columns\nhợp lệ?"}
+    G -- Không --> G1["❌ Log FAILED:\nINVALID_CSV_HEADER"]
 
-    alt Header invalid
-        WORKER->>DB: Log FAILED (INVALID_CSV_HEADER)
-        WORKER->>WORKER: Abort file
-    else Header valid
-        loop Batch of 100 rows
-            WORKER->>WORKER: Parse + validate rows
-            WORKER->>DB: BEGIN TRANSACTION
-            WORKER->>DB: UPSERT batch (by student_id)
-            Note right of DB: New student → password = {MSSV}@unihub
-            WORKER->>DB: COMMIT
-        end
-        WORKER->>DB: Log COMPLETED (summary)
+    G -- Có --> H["Chia thành batch\n(100 rows/batch)"]
+
+    subgraph BATCH ["🔄 Xử lý từng batch"]
+        H --> I["Parse + validate từng row"]
+        I --> J{"Row hợp lệ?"}
+        J -- Không --> J1["Ghi nhận lỗi\n(skipped +1)"]
+        J -- Có --> K["BEGIN TRANSACTION"]
+        K --> L{"student_id\nđã tồn tại?"}
+        L -- Có --> M["UPDATE thông tin\n(full_name, email, faculty...)"]
+        L -- Chưa --> N["INSERT user mới\npassword = MSSV@unihub\nis_synced = true"]
+        M --> O["COMMIT"]
+        N --> O
+        O --> P{"Còn batch\ntiếp theo?"}
+        P -- Có --> I
     end
+
+    J1 --> P
+    P -- Không --> Q["📊 Log COMPLETED\n(inserted, updated, skipped, failed)"]
+
+    style BATCH fill:#1e293b,stroke:#6366f1,color:#fff
 ```
 
 ---
