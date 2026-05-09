@@ -264,11 +264,6 @@ export default function RegisterPage({
               </p>
             </div>
 
-            {/* Show idempotency key for transparency */}
-            <div className="rounded-lg bg-gray-800/50 px-3 py-2 text-xs text-gray-500">
-              <span className="font-medium text-gray-400">Idempotency-Key:</span>{' '}
-              <code className="text-gray-500">{idempotencyKeyRef.current}</code>
-            </div>
 
             <button
               onClick={handlePay}

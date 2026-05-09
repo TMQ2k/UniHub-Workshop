@@ -20,7 +20,7 @@ export class NotificationController {
   constructor(private readonly notificationService: NotificationService) {}
 
   @Get('me')
-  @Roles(UserRole.STUDENT, UserRole.ORGANIZER)
+  @Roles(UserRole.STUDENT)
   async getMyNotifications(@Request() req: { user: { userId: string } }) {
     const result = await this.notificationService.getMyNotifications(
       req.user.userId,
@@ -33,7 +33,7 @@ export class NotificationController {
   }
 
   @Patch(':id/read')
-  @Roles(UserRole.STUDENT, UserRole.ORGANIZER)
+  @Roles(UserRole.STUDENT)
   @HttpCode(HttpStatus.OK)
   async markAsRead(
     @Param('id') id: string,

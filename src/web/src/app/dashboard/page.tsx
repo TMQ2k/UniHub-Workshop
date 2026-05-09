@@ -194,6 +194,14 @@ export default function DashboardPage() {
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex items-center justify-end gap-2">
+                        {w.status === 'PUBLISHED' && (
+                          <Link
+                            href={`/dashboard/workshops/${w.id}/registrations`}
+                            className="rounded-lg bg-indigo-600/20 px-3 py-1.5 text-xs font-medium text-indigo-400 transition-colors hover:bg-indigo-600/30"
+                          >
+                            📋 Đăng ký
+                          </Link>
+                        )}
                         {w.status !== 'CANCELLED' && (
                           <Link
                             href={`/dashboard/workshops/${w.id}/edit`}

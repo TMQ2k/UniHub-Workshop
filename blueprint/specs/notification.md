@@ -12,7 +12,7 @@ Hiện tại đã triển khai kênh **Email** sử dụng nodemailer với SMTP
 |-------|---------|
 | System (internal) | Trigger notification khi có sự kiện (đăng ký, thanh toán, hủy...) |
 | STUDENT | Nhận thông báo qua email, xem inbox, đánh dấu đã đọc |
-| ORGANIZER | Xem inbox thông báo |
+
 
 ## Luồng chính
 
@@ -56,12 +56,12 @@ Hiện tại đã triển khai kênh **Email** sử dụng nodemailer với SMTP
 4. Log Ethereal preview URL trong môi trường development.
 5. Sender address: `SMTP_FROM` env var, mặc định `noreply@unihub.edu.vn`.
 
-### Luồng 5 — Xem thông báo (STUDENT, ORGANIZER)
+### Luồng 5 — Xem thông báo (STUDENT)
 
 1. `GET /notifications/me` → trả danh sách thông báo của user, sắp xếp theo `createdAt` DESC.
 2. Response bao gồm `unreadCount` cho badge hiển thị.
 
-### Luồng 6 — Đánh dấu đã đọc (STUDENT, ORGANIZER)
+### Luồng 6 — Đánh dấu đã đọc (STUDENT)
 
 1. `PATCH /notifications/:id/read` → update `isRead = true` (chỉ cho notification thuộc user hiện tại).
 
@@ -102,13 +102,13 @@ interface NotificationPayload {
 - [x] Thêm kênh mới → chỉ tạo class mới implement `INotificationChannel`, không sửa code cũ.
 - [x] Email fail → retry 3 lần (1s, 5s, 30s backoff).
 - [x] Notification không block request chính (bất đồng bộ qua queue).
-- [x] STUDENT/ORGANIZER xem inbox thông báo, đánh dấu đã đọc.
+- [x] STUDENT xem inbox thông báo, đánh dấu đã đọc.
 
 ## API Contract
 
-### GET /notifications/me (STUDENT, ORGANIZER)
+### GET /notifications/me (STUDENT)
 
-**Guards:** `JwtAuthGuard`, `RolesGuard` — `@Roles(STUDENT, ORGANIZER)`
+**Guards:** `JwtAuthGuard`, `RolesGuard` — `@Roles(STUDENT)`
 
 ```json
 // Response 200
@@ -122,9 +122,9 @@ interface NotificationPayload {
 }
 ```
 
-### PATCH /notifications/:id/read (STUDENT, ORGANIZER)
+### PATCH /notifications/:id/read (STUDENT)
 
-**Guards:** `JwtAuthGuard`, `RolesGuard` — `@Roles(STUDENT, ORGANIZER)`
+**Guards:** `JwtAuthGuard`, `RolesGuard` — `@Roles(STUDENT)`
 
 ```json
 // Response 200

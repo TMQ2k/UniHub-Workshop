@@ -303,7 +303,7 @@ Sử dụng **Role-Based Access Control** với 3 roles cố định. Mỗi role
 | `payment:create` | ✅ | ❌ | ❌ |
 | `payment:stats` | ❌ | ✅ | ❌ |
 | `checkin:scan` | ❌ | ❌ | ✅ |
-| `notification:read:own` | ✅ | ✅ | ❌ |
+| `notification:read:own` | ✅ | ❌ | ❌ |
 | `stats:read` | ❌ | ✅ | ❌ |
 | `csv-sync:manage` | ❌ | ✅ | ❌ |
 | `ai-summary:upload` | ❌ | ✅ | ❌ |

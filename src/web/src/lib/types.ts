@@ -89,3 +89,12 @@ export interface RegistrationStats {
   pending: number;
   cancelled: number;
 }
+
+export interface Notification {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: string;
+}
