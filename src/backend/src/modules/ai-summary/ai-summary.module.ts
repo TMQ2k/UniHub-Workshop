@@ -9,8 +9,6 @@ import { AiSummaryController } from './ai-summary.controller.js';
 import { AiSummaryProcessor } from './ai-summary.processor.js';
 import { PdfParserService } from './services/pdf-parser.service.js';
 import { AiService } from './services/ai.service.js';
-import { PdfExtractService } from './services/pdf-extract.service.js';
-import { ParsePdfController } from './parse-pdf.controller.js';
 
 @Module({
   imports: [
@@ -20,15 +18,15 @@ import { ParsePdfController } from './parse-pdf.controller.js';
     }),
     ConfigModule,
   ],
-  controllers: [AiSummaryController, ParsePdfController],
+  controllers: [AiSummaryController],
   providers: [
     AiSummaryService,
     AiSummaryProcessor,
     // SRP: Dedicated, independent services
     PdfParserService,
     AiService,
-    PdfExtractService,
   ],
   exports: [AiSummaryService],
 })
 export class AiSummaryModule {}
+

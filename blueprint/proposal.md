@@ -73,7 +73,7 @@ Xây dựng hệ thống **UniHub Workshop** để số hóa toàn bộ quy trì
 - ✅ Hệ thống phân quyền RBAC (3 roles)
 - ✅ Thanh toán qua **mock adapter** (interface thật, implementation giả lập)
 - ✅ Thông báo email + app push
-- ✅ AI Summary từ PDF upload (Anthropic Claude API)
+- ✅ AI Summary từ PDF upload (Google Gemini 2.5 Flash API)
 - ✅ Đồng bộ sinh viên từ CSV (cron job 15 phút), tạo tài khoản tự động
 - ✅ Các cơ chế bảo vệ: Pessimistic Lock, Token Bucket, Circuit Breaker, Idempotency Key
 - ✅ Docker Compose cho môi trường local

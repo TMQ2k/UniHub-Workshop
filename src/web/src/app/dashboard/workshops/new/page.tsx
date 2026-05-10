@@ -11,7 +11,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 // ============================================================
 // Create Workshop Form — ORGANIZER only
-// With PDF upload for auto-fill
+// With PDF upload for AI Summary generation
 // ============================================================
 
 export default function CreateWorkshopPage() {
@@ -32,9 +32,12 @@ export default function CreateWorkshopPage() {
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // PDF upload state
+  // PDF upload & AI Summary state
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfUploading, setPdfUploading] = useState(false);
-  const [pdfSuccess, setPdfSuccess] = useState<string | null>(null);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiStatus, setAiStatus] = useState<'idle' | 'uploading' | 'processing' | 'completed' | 'failed'>('idle');
+  const [pollingWorkshopId, setPollingWorkshopId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -42,6 +45,34 @@ export default function CreateWorkshopPage() {
       router.push('/login');
     }
   }, [authLoading, user, isOrganizer, router]);
+
+  // Poll for AI summary status after workshop creation + PDF upload
+  useEffect(() => {
+    if (!pollingWorkshopId || !accessToken || aiStatus !== 'processing') return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/workshops/${pollingWorkshopId}/ai-summary`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const json = await res.json();
+        if (json.success && json.data) {
+          if (json.data.status === 'COMPLETED' && json.data.summary) {
+            setAiSummary(json.data.summary);
+            setAiStatus('completed');
+            clearInterval(interval);
+          } else if (json.data.status === 'FAILED') {
+            setAiStatus('failed');
+            clearInterval(interval);
+          }
+        }
+      } catch {
+        // Keep polling
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [pollingWorkshopId, accessToken, aiStatus]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -51,62 +82,48 @@ export default function CreateWorkshopPage() {
     }));
   };
 
-  // ── PDF Upload & Auto-fill ────────────────────────────────
-  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ── PDF file selection ────────────────────────────────────
+  const handlePdfSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !accessToken) return;
+    if (!file) return;
+    setPdfFile(file);
+    setAiSummary(null);
+    setAiStatus('idle');
+  };
 
-    setPdfUploading(true);
-    setPdfSuccess(null);
-    setError(null);
+  const removePdf = () => {
+    setPdfFile(null);
+    setAiSummary(null);
+    setAiStatus('idle');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
+  // ── Upload PDF to generate AI Summary after workshop creation ──
+  const uploadPdfForSummary = async (workshopId: string) => {
+    if (!pdfFile || !accessToken) return;
+
+    setAiStatus('uploading');
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', pdfFile);
 
-      const res = await fetch(`${API_BASE}/workshops/parse-pdf`, {
+      const res = await fetch(`${API_BASE}/workshops/${workshopId}/ai-summary`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+        headers: { Authorization: `Bearer ${accessToken}` },
         body: formData,
       });
 
       const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        setError({
-          code: json.error?.code,
-          message: json.error?.message || 'Không thể phân tích PDF.',
-        });
-        return;
+      if (res.ok && json.success) {
+        setAiStatus('processing');
+        setPollingWorkshopId(workshopId);
+      } else {
+        setAiStatus('failed');
       }
-
-      const fields = json.data.extractedFields;
-
-      // Auto-fill form fields with extracted data
-      setForm((prev) => ({
-        ...prev,
-        title: fields.title || prev.title,
-        description: fields.description || prev.description,
-        speaker: fields.speaker || prev.speaker,
-        room: fields.room || prev.room,
-        startTime: fields.startTime ? convertToDateTimeLocal(fields.startTime) : prev.startTime,
-        endTime: fields.endTime ? convertToDateTimeLocal(fields.endTime) : prev.endTime,
-        maxSeats: fields.maxSeats || prev.maxSeats,
-        price: fields.price ?? prev.price,
-      }));
-
-      const filledCount = Object.values(fields).filter((v) => v !== null).length;
-      setPdfSuccess(`Đã trích xuất ${filledCount} trường từ PDF "${file.name}". Vui lòng kiểm tra và chỉnh sửa.`);
     } catch {
-      setError({ message: 'Lỗi khi upload PDF.' });
-    } finally {
-      setPdfUploading(false);
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      setAiStatus('failed');
     }
   };
 
@@ -119,7 +136,7 @@ export default function CreateWorkshopPage() {
     setSubmitting(true);
 
     try {
-      await apiFetch('/workshops', {
+      const workshop = await apiFetch<{ id: string }>('/workshops', {
         method: 'POST',
         token: accessToken,
         body: JSON.stringify({
@@ -128,8 +145,16 @@ export default function CreateWorkshopPage() {
           endTime: new Date(form.endTime).toISOString(),
         }),
       });
+
       setSuccess(true);
-      setTimeout(() => router.push('/dashboard'), 1500);
+
+      // If PDF was selected, upload it for AI summary
+      if (pdfFile && workshop?.id) {
+        await uploadPdfForSummary(workshop.id);
+        // Don't redirect yet — show summary generation progress
+      } else {
+        setTimeout(() => router.push('/dashboard'), 1500);
+      }
     } catch (err) {
       if (err instanceof ApiRequestError) {
         setError({ code: err.code, message: err.message });
@@ -162,7 +187,7 @@ export default function CreateWorkshopPage() {
             <ErrorAlert code={error.code} message={error.message} onDismiss={() => setError(null)} />
           </div>
         )}
-        {success && (
+        {success && !pdfFile && (
           <div className="mb-5">
             <SuccessAlert message="Workshop đã được tạo! Đang chuyển hướng..." />
           </div>
@@ -171,43 +196,125 @@ export default function CreateWorkshopPage() {
         {/* ── PDF Upload Section ─────────────────────────── */}
         <div className="mb-6 rounded-xl border-2 border-dashed border-indigo-500/30 bg-indigo-500/5 p-5">
           <div className="flex items-center gap-3 mb-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/20 text-lg">📄</span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/20 text-lg">🤖</span>
             <div>
-              <p className="text-sm font-semibold text-white">Auto-fill từ PDF</p>
-              <p className="text-xs text-gray-500">Upload file PDF để tự động điền các trường</p>
+              <p className="text-sm font-semibold text-white">AI Summary từ PDF</p>
+              <p className="text-xs text-gray-500">Upload file PDF giới thiệu workshop để AI tạo bản tóm tắt</p>
             </div>
           </div>
 
-          <label
-            htmlFor="pdf-upload"
-            className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-              pdfUploading
-                ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                : 'bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30'
-            }`}
-          >
-            {pdfUploading ? (
-              <>⏳ Đang phân tích...</>
-            ) : (
-              <>📂 Chọn file PDF</>
-            )}
-          </label>
-          <input
-            ref={fileInputRef}
-            id="pdf-upload"
-            type="file"
-            accept=".pdf"
-            onChange={handlePdfUpload}
-            disabled={pdfUploading}
-            className="hidden"
-          />
-
-          {pdfSuccess && (
-            <div className="mt-3 rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-400">
-              ✅ {pdfSuccess}
+          {!pdfFile ? (
+            <>
+              <label
+                htmlFor="pdf-upload"
+                className="flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30"
+              >
+                📂 Chọn file PDF
+              </label>
+              <input
+                ref={fileInputRef}
+                id="pdf-upload"
+                type="file"
+                accept=".pdf"
+                onChange={handlePdfSelect}
+                className="hidden"
+              />
+            </>
+          ) : (
+            <div className="flex items-center justify-between rounded-lg bg-white/5 px-4 py-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-lg">📄</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-white truncate">{pdfFile.name}</p>
+                  <p className="text-xs text-gray-500">{(pdfFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                </div>
+              </div>
+              {aiStatus === 'idle' && (
+                <button
+                  type="button"
+                  onClick={removePdf}
+                  className="rounded-lg px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                >
+                  ✕ Xóa
+                </button>
+              )}
             </div>
           )}
+
+          {pdfFile && aiStatus === 'idle' && (
+            <p className="mt-2 text-xs text-gray-500">
+              📌 PDF sẽ được upload sau khi tạo workshop. AI sẽ tự động tạo bản tóm tắt.
+            </p>
+          )}
         </div>
+
+        {/* ── AI Summary Progress (after creation) ──────── */}
+        {success && pdfFile && (
+          <div className="mb-6 rounded-xl border border-white/10 bg-gray-800/60 p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-lg">🤖</span>
+              <h3 className="text-sm font-semibold text-white">AI Summary</h3>
+            </div>
+
+            {aiStatus === 'uploading' && (
+              <div className="flex items-center gap-2 text-sm text-gray-400">
+                <svg className="h-4 w-4 animate-spin text-indigo-500" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Đang upload PDF...
+              </div>
+            )}
+
+            {aiStatus === 'processing' && (
+              <div>
+                <div className="flex items-center gap-2 text-sm text-amber-400 mb-3">
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  AI đang phân tích và tóm tắt nội dung...
+                </div>
+                <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                  <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 animate-pulse" style={{ width: '60%' }} />
+                </div>
+              </div>
+            )}
+
+            {aiStatus === 'completed' && aiSummary && (
+              <div>
+                <div className="flex items-center gap-2 text-sm text-emerald-400 mb-3">
+                  ✅ Tóm tắt đã được tạo thành công!
+                </div>
+                <div className="rounded-lg bg-white/5 border border-white/10 p-4">
+                  <p className="text-sm leading-relaxed text-gray-300 whitespace-pre-line">{aiSummary}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push('/dashboard')}
+                  className="mt-4 w-full rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 py-2.5 text-sm font-semibold text-white transition-all hover:brightness-110"
+                >
+                  ← Quay lại Dashboard
+                </button>
+              </div>
+            )}
+
+            {aiStatus === 'failed' && (
+              <div>
+                <div className="flex items-center gap-2 text-sm text-red-400 mb-2">
+                  ❌ Không thể tạo tóm tắt AI. Bạn có thể thử lại sau trong phần chỉnh sửa workshop.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push('/dashboard')}
+                  className="mt-2 rounded-lg bg-white/10 px-4 py-2 text-sm text-gray-300 hover:bg-white/20 transition-colors"
+                >
+                  ← Quay lại Dashboard
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Title */}
@@ -222,7 +329,8 @@ export default function CreateWorkshopPage() {
               value={form.title}
               onChange={handleChange}
               required
-              className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white placeholder-gray-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              disabled={success}
+              className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white placeholder-gray-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
               placeholder="VD: Kỹ năng viết CV chuyên nghiệp"
             />
           </div>
@@ -238,7 +346,8 @@ export default function CreateWorkshopPage() {
               rows={3}
               value={form.description}
               onChange={handleChange}
-              className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white placeholder-gray-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              disabled={success}
+              className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white placeholder-gray-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
               placeholder="Mô tả chi tiết về workshop..."
             />
           </div>
@@ -255,7 +364,8 @@ export default function CreateWorkshopPage() {
                 type="text"
                 value={form.speaker}
                 onChange={handleChange}
-                className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white placeholder-gray-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                disabled={success}
+                className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white placeholder-gray-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
                 placeholder="VD: TS. Nguyễn Văn A"
               />
             </div>
@@ -269,7 +379,8 @@ export default function CreateWorkshopPage() {
                 type="text"
                 value={form.room}
                 onChange={handleChange}
-                className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white placeholder-gray-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                disabled={success}
+                className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white placeholder-gray-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
                 placeholder="VD: B.201"
               />
             </div>
@@ -288,7 +399,8 @@ export default function CreateWorkshopPage() {
                 value={form.startTime}
                 onChange={handleChange}
                 required
-                className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                disabled={success}
+                className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
               />
             </div>
             <div>
@@ -302,7 +414,8 @@ export default function CreateWorkshopPage() {
                 value={form.endTime}
                 onChange={handleChange}
                 required
-                className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                disabled={success}
+                className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
               />
             </div>
           </div>
@@ -322,7 +435,8 @@ export default function CreateWorkshopPage() {
                 value={form.maxSeats}
                 onChange={handleChange}
                 required
-                className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                disabled={success}
+                className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
               />
             </div>
             <div>
@@ -336,35 +450,23 @@ export default function CreateWorkshopPage() {
                 min={0}
                 value={form.price}
                 onChange={handleChange}
-                className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                disabled={success}
+                className="w-full rounded-lg border border-white/10 bg-gray-800 px-3 py-2.5 text-white outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
               />
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {submitting ? 'Đang tạo...' : 'Tạo Workshop'}
-          </button>
+          {!success && (
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {submitting ? 'Đang tạo...' : pdfFile ? 'Tạo Workshop & Upload PDF' : 'Tạo Workshop'}
+            </button>
+          )}
         </form>
       </div>
     </div>
   );
-}
-
-/** Convert ISO or partial datetime string to datetime-local input format */
-function convertToDateTimeLocal(isoOrPartial: string): string {
-  try {
-    // If it's already in the right format YYYY-MM-DDTHH:mm
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(isoOrPartial)) {
-      return isoOrPartial.substring(0, 16);
-    }
-    const d = new Date(isoOrPartial);
-    if (isNaN(d.getTime())) return '';
-    return d.toISOString().substring(0, 16);
-  } catch {
-    return '';
-  }
 }

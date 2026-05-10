@@ -98,3 +98,10 @@ export interface Notification {
   read: boolean;
   createdAt: string;
 }
+
+export interface AiSummary {
+  workshopId: string;
+  summary: string | null;
+  status: 'PROCESSING' | 'COMPLETED' | 'FAILED' | null;
+  generatedAt: string | null;
+}
