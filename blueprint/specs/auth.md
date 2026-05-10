@@ -8,11 +8,11 @@ Module xác thực và phân quyền cho toàn bộ hệ thống UniHub Workshop
 
 ## Actor
 
-| Actor | Vai trò trong module |
-|-------|---------------------|
-| Sinh viên | Đăng nhập bằng MSSV + mật khẩu (tài khoản được tạo tự động qua CSV Sync), nhận JWT, truy cập tài nguyên theo quyền STUDENT |
-| Ban tổ chức | Đăng nhập, truy cập trang admin với quyền ORGANIZER |
-| Nhân sự check-in | Đăng nhập trên mobile app, truy cập chức năng quét QR với quyền CHECKIN_STAFF |
+| Actor             | Vai trò trong module                                                                                                                   |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Sinh viên         | Đăng nhập bằng MSSV + mật khẩu (tài khoản được tạo tự động qua CSV Sync), nhận JWT, truy cập tài nguyên theo quyền STUDENT             |
+| Ban tổ chức       | Đăng nhập, truy cập trang admin với quyền ORGANIZER                                                                                    |
+| Nhân sự check-in  | Đăng nhập trên mobile app, truy cập chức năng quét QR với quyền CHECKIN_STAFF                                                          |
 | System (CSV Sync) | Tạo tài khoản sinh viên tự động khi import CSV. Mật khẩu mặc định: `{MSSV}@unihub`. Sử dụng `AuthService.hashPassword()` static method |
 
 ## Luồng chính
@@ -58,18 +58,19 @@ Module xác thực và phân quyền cho toàn bộ hệ thống UniHub Workshop
 
 ## Kịch bản lỗi
 
-| Kịch bản | Xử lý | Error Code | HTTP Status |
-|----------|-------|------------|-------------|
-| Sai MSSV hoặc mật khẩu | Trả lỗi, không phân biệt sai field nào (chống enumeration) | `INVALID_CREDENTIALS` | 401 |
-| MSSV chưa tồn tại trong hệ thống (chưa được sync từ CSV) | Trả lỗi chung, không tiết lộ user không tồn tại | `INVALID_CREDENTIALS` | 401 |
-| Access token hết hạn | Client dùng refresh token để lấy token mới | `TOKEN_EXPIRED` | 401 |
-| Refresh token hết hạn/bị revoke | Yêu cầu đăng nhập lại | `TOKEN_EXPIRED` | 401 |
-| Truy cập endpoint không đủ quyền | Từ chối ngay | `FORBIDDEN` | 403 |
-| Account bị khóa (locked) | Từ chối đăng nhập | `ACCOUNT_LOCKED` | 403 |
+| Kịch bản                                                 | Xử lý                                                      | Error Code            | HTTP Status |
+| -------------------------------------------------------- | ---------------------------------------------------------- | --------------------- | ----------- |
+| Sai MSSV hoặc mật khẩu                                   | Trả lỗi, không phân biệt sai field nào (chống enumeration) | `INVALID_CREDENTIALS` | 401         |
+| MSSV chưa tồn tại trong hệ thống (chưa được sync từ CSV) | Trả lỗi chung, không tiết lộ user không tồn tại            | `INVALID_CREDENTIALS` | 401         |
+| Access token hết hạn                                     | Client dùng refresh token để lấy token mới                 | `TOKEN_EXPIRED`       | 401         |
+| Refresh token hết hạn/bị revoke                          | Yêu cầu đăng nhập lại                                      | `TOKEN_EXPIRED`       | 401         |
+| Truy cập endpoint không đủ quyền                         | Từ chối ngay                                               | `FORBIDDEN`           | 403         |
+| Account bị khóa (locked)                                 | Từ chối đăng nhập                                          | `ACCOUNT_LOCKED`      | 403         |
 
 ## Ràng buộc
 
 ### Bảo mật
+
 - Mật khẩu lưu dưới dạng **bcrypt hash** (salt rounds = 10).
 - Access token TTL mặc định = **15 phút**, refresh token TTL mặc định = **7 ngày** (configurable qua `JWT_ACCESS_EXPIRES_IN` và `JWT_REFRESH_EXPIRES_IN`).
 - Refresh token lưu **hash** (SHA-256) trong database, không lưu plaintext.
@@ -78,23 +79,24 @@ Module xác thực và phân quyền cho toàn bộ hệ thống UniHub Workshop
 - Refresh token rotation: mỗi lần refresh, token cũ bị revoke, cấp token hoàn toàn mới.
 
 ### Hiệu năng
+
 - Login endpoint phải respond < **500ms** (bao gồm bcrypt verify).
 - Token verification < **10ms** (stateless JWT).
 
 ### RBAC Permission Matrix
 
-| Permission | STUDENT | ORGANIZER | CHECKIN_STAFF |
-|-----------|---------|-----------|---------------|
-| `workshop:read` | ✅ | ✅ | ❌ |
-| `workshop:write` | ❌ | ✅ | ❌ |
-| `registration:create` | ✅ | ❌ | ❌ |
-| `registration:read:own` | ✅ | ✅ | ❌ |
-| `registration:read:all` | ❌ | ✅ | ❌ |
-| `payment:create` | ✅ | ❌ | ❌ |
-| `checkin:scan` | ❌ | ❌ | ✅ |
-| `stats:read` | ❌ | ✅ | ❌ |
-| `csv-sync:manage` | ❌ | ✅ | ❌ |
-| `ai-summary:upload` | ❌ | ✅ | ❌ |
+| Permission              | STUDENT | ORGANIZER | CHECKIN_STAFF |
+| ----------------------- | ------- | --------- | ------------- |
+| `workshop:read`         | ✅      | ✅        | ❌            |
+| `workshop:write`        | ❌      | ✅        | ❌            |
+| `registration:create`   | ✅      | ❌        | ❌            |
+| `registration:read:own` | ✅      | ✅        | ❌            |
+| `registration:read:all` | ❌      | ✅        | ❌            |
+| `payment:create`        | ✅      | ❌        | ❌            |
+| `checkin:scan`          | ❌      | ❌        | ✅            |
+| `stats:read`            | ❌      | ✅        | ❌            |
+| `csv-sync:manage`       | ❌      | ✅        | ❌            |
+| `ai-summary:upload`     | ❌      | ✅        | ❌            |
 
 ## Tiêu chí chấp nhận
 
@@ -109,14 +111,10 @@ Module xác thực và phân quyền cho toàn bộ hệ thống UniHub Workshop
 
 ## API Contract
 
-### ~~POST /auth/register~~ (ĐÃ LOẠI BỎ)
-
-> **Endpoint này đã bị loại bỏ.** Tài khoản sinh viên được tạo tự động qua CSV Sync module.
-> Sinh viên không thể tự đăng ký tài khoản. Nếu chưa có tài khoản, sinh viên cần liên hệ phòng đào tạo để được cập nhật vào hệ thống.
-
 ### POST /auth/login
 
 **Request:**
+
 ```json
 {
   "studentId": "21127001",
@@ -125,6 +123,7 @@ Module xác thực và phân quyền cho toàn bộ hệ thống UniHub Workshop
 ```
 
 **Response (200):**
+
 ```json
 {
   "success": true,
@@ -143,6 +142,7 @@ Module xác thực và phân quyền cho toàn bộ hệ thống UniHub Workshop
 ```
 
 **Response (401):**
+
 ```json
 {
   "success": false,
@@ -156,6 +156,7 @@ Module xác thực và phân quyền cho toàn bộ hệ thống UniHub Workshop
 ### POST /auth/refresh
 
 **Request:**
+
 ```json
 {
   "refreshToken": "dGhpcyBpcyBhIHJlZnJl..."
@@ -163,6 +164,7 @@ Module xác thực và phân quyền cho toàn bộ hệ thống UniHub Workshop
 ```
 
 **Response (200):**
+
 ```json
 {
   "success": true,
@@ -179,6 +181,7 @@ Module xác thực và phân quyền cho toàn bộ hệ thống UniHub Workshop
 **Headers:** `Authorization: Bearer <accessToken>`
 
 **Response (200):**
+
 ```json
 {
   "success": true,
@@ -192,6 +195,7 @@ Module xác thực và phân quyền cho toàn bộ hệ thống UniHub Workshop
 **Headers:** `Authorization: Bearer <accessToken>`
 
 **Response (200):**
+
 ```json
 {
   "success": true,
