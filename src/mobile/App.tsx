@@ -15,8 +15,8 @@ function AppContent() {
   const { refreshQueue } = useCheckInQueue();
   const { isLoggedIn } = useAuth();
 
-  // Activate background auto-sync
-  useAutoSync();
+  // Activate background auto-sync — returns manual sync trigger
+  const { syncNow } = useAutoSync();
 
   // Hydrate queue from AsyncStorage on cold start
   useEffect(() => {
@@ -26,7 +26,7 @@ function AppContent() {
   return (
     <>
       <StatusBar style="light" />
-      {isLoggedIn ? <ScannerScreen /> : <LoginScreen />}
+      {isLoggedIn ? <ScannerScreen syncNow={syncNow} /> : <LoginScreen />}
     </>
   );
 }

@@ -252,6 +252,7 @@ curl http://localhost:3000/api/workshops \
 | Method | Endpoint | Mô tả | Auth |
 |---|---|---|---|
 | POST | `/checkins/sync` | Sync offline check-in | ✅ CHECKIN_STAFF |
+| GET | `/checkins?workshopId=` | Danh sách đã check-in | ✅ ORGANIZER |
 
 ### AI Summary (`/api/workshops`)
 

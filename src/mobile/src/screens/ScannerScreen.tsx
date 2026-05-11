@@ -7,6 +7,7 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useNetwork } from '../contexts/NetworkContext';
@@ -24,7 +25,8 @@ import { API_BASE_URL } from '../constants';
  * 3. Decodes → validates workshopId → syncs check-in
  * 4. Offline → enqueues to AsyncStorage for later sync
  */
-export default function ScannerScreen() {
+export default function ScannerScreen({ syncNow }: { syncNow?: () => Promise<void> }) {
+  const [syncing, setSyncing] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [lastResult, setLastResult] = useState<{
@@ -38,7 +40,7 @@ export default function ScannerScreen() {
   const [loadingWorkshops, setLoadingWorkshops] = useState(true);
 
   const { isConnected } = useNetwork();
-  const { addToQueue, pendingCount, refreshQueue } = useCheckInQueue();
+  const { addToQueue, pendingCount, refreshQueue, clearQueue } = useCheckInQueue();
   const { accessToken, logout, userName } = useAuth();
 
   // Load queue on mount
@@ -83,7 +85,7 @@ export default function ScannerScreen() {
           return { registrationId: parsed.registrationId, workshopId: parsed.workshopId };
         }
       } catch {
-        // Not JSON either — treat raw string as registrationId
+        // Not JSON either
       }
     }
     return null;
@@ -143,7 +145,7 @@ export default function ScannerScreen() {
 
         if (status === 200 && body.success) {
           const result = body.data?.results?.[0];
-          if (result?.status === 'error') {
+          if (result?.status === 'failed') {
             setLastResult({ type: 'error', message: `❌ ${result.reason}` });
           } else {
             setLastResult({ type: 'success', message: '✅ Check-in thành công!' });
@@ -219,9 +221,40 @@ export default function ScannerScreen() {
           <View style={[styles.networkDot, { backgroundColor: isConnected ? '#34D399' : '#F87171' }]} />
           <Text style={styles.statusText}>{isConnected ? 'Online' : 'Offline'}</Text>
           {pendingCount > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{pendingCount}</Text>
-            </View>
+            <TouchableOpacity
+              style={styles.syncBtn}
+              disabled={syncing}
+              onPress={async () => {
+                if (!syncNow) return;
+                setSyncing(true);
+                try {
+                  await syncNow();
+                } finally {
+                  setSyncing(false);
+                }
+              }}
+              onLongPress={() => {
+                Alert.alert(
+                  'Xóa hàng chờ?',
+                  `Bạn có chắc muốn xóa ${pendingCount} bản ghi chờ đồng bộ? Dữ liệu sẽ bị mất vĩnh viễn.`,
+                  [
+                    { text: 'Hủy', style: 'cancel' },
+                    {
+                      text: 'Xóa',
+                      style: 'destructive',
+                      onPress: async () => {
+                        await clearQueue();
+                        Alert.alert('Đã xóa', 'Hàng chờ đã được xóa.');
+                      },
+                    },
+                  ],
+                );
+              }}
+            >
+              <Text style={styles.syncBtnText}>
+                {syncing ? '⏳' : '🔄'} {pendingCount}
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
       </View>
@@ -369,6 +402,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   badgeText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  syncBtn: {
+    backgroundColor: '#F59E0B',
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 4,
+  },
+  syncBtnText: {
     color: '#FFF',
     fontSize: 12,
     fontWeight: '700',

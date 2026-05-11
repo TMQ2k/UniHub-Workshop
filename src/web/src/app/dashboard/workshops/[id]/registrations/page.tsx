@@ -16,6 +16,8 @@ interface RegistrationItem {
   studentId: string;
   studentName: string;
   status: 'CONFIRMED' | 'PENDING_PAYMENT' | 'CANCELLED';
+  checkedIn: boolean;
+  checkedInAt: string | null;
   createdAt: string;
 }
 
@@ -89,7 +91,9 @@ export default function WorkshopRegistrationsPage({
   const filtered =
     filter === 'ALL'
       ? registrations
-      : registrations.filter((r) => r.status === filter);
+      : filter === 'CHECKED_IN'
+        ? registrations.filter((r) => r.checkedIn)
+        : registrations.filter((r) => r.status === filter);
 
   // ── Loading ───────────────────────────────────────────────
   if (authLoading || loadingData) {
@@ -139,9 +143,10 @@ export default function WorkshopRegistrationsPage({
 
       {/* Stats Cards */}
       {meta && (
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
           <StatCard label="Tổng" value={meta.total} color="text-white" bg="bg-white/10" />
           <StatCard label="Đã xác nhận" value={meta.confirmed} color="text-emerald-400" bg="bg-emerald-500/10" />
+          <StatCard label="Đã check-in" value={meta.checkedIn} color="text-cyan-400" bg="bg-cyan-500/10" />
           <StatCard label="Chờ thanh toán" value={meta.pending} color="text-amber-400" bg="bg-amber-500/10" />
           <StatCard label="Đã hủy" value={meta.cancelled} color="text-red-400" bg="bg-red-500/10" />
         </div>
@@ -152,6 +157,7 @@ export default function WorkshopRegistrationsPage({
         {[
           { key: 'ALL', label: 'Tất cả' },
           { key: 'CONFIRMED', label: '✅ Đã xác nhận' },
+          { key: 'CHECKED_IN', label: '📲 Đã check-in' },
           { key: 'PENDING_PAYMENT', label: '⏳ Chờ TT' },
           { key: 'CANCELLED', label: '❌ Đã hủy' },
         ].map((tab) => (
@@ -186,6 +192,7 @@ export default function WorkshopRegistrationsPage({
                   <th className="px-5 py-3">MSSV</th>
                   <th className="px-5 py-3">Họ tên</th>
                   <th className="px-5 py-3">Trạng thái</th>
+                  <th className="px-5 py-3">Check-in</th>
                   <th className="px-5 py-3">Thời gian đăng ký</th>
                 </tr>
               </thead>
@@ -205,6 +212,17 @@ export default function WorkshopRegistrationsPage({
                         <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${cfg.color}`}>
                           {cfg.icon} {cfg.label}
                         </span>
+                      </td>
+                      <td className="px-5 py-3">
+                        {r.checkedIn ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/20 px-2.5 py-0.5 text-xs font-semibold text-cyan-400">
+                            📲 {r.checkedInAt
+                              ? new Date(r.checkedInAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+                              : 'Đã quét'}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-600">—</span>
+                        )}
                       </td>
                       <td className="px-5 py-3 text-gray-400">
                         {new Date(r.createdAt).toLocaleString('vi-VN', {

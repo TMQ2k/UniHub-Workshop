@@ -88,6 +88,7 @@ export interface RegistrationStats {
   confirmed: number;
   pending: number;
   cancelled: number;
+  checkedIn: number;
 }
 
 export interface Notification {

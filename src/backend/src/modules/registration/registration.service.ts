@@ -310,29 +310,47 @@ export class RegistrationService {
   // ──────────────────────────────────────────────────────────
 
   async getWorkshopRegistrations(workshopId: string) {
-    const registrations = await this.registrationRepo.find({
-      where: { workshopId },
-      relations: ['student'],
-      order: { createdAt: 'ASC' },
-    });
+    // Use QueryBuilder to LEFT JOIN check_ins and expose check-in status
+    const rows = await this.registrationRepo
+      .createQueryBuilder('r')
+      .leftJoinAndSelect('r.student', 'student')
+      .leftJoin('check_ins', 'ci', 'ci.registration_id = r.id')
+      .addSelect('ci.scanned_at', 'ci_scanned_at')
+      .where('r.workshop_id = :workshopId', { workshopId })
+      .orderBy('r.created_at', 'ASC')
+      .getRawAndEntities();
 
+    // Build a map of registrationId → scannedAt from raw results
+    const checkinMap = new Map<string, string | null>();
+    for (const raw of rows.raw) {
+      checkinMap.set(raw.r_id, raw.ci_scanned_at ?? null);
+    }
+
+    const registrations = rows.entities;
     const confirmed = registrations.filter((r) => r.status === RegistrationStatus.CONFIRMED).length;
     const pending = registrations.filter((r) => r.status === RegistrationStatus.PENDING_PAYMENT).length;
     const cancelled = registrations.filter((r) => r.status === RegistrationStatus.CANCELLED).length;
+    const checkedIn = registrations.filter((r) => checkinMap.get(r.id) !== null).length;
 
     return {
-      data: registrations.map((r) => ({
-        id: r.id,
-        studentId: r.studentId,
-        studentName: r.student?.fullName ?? '',
-        status: r.status,
-        createdAt: r.createdAt.toISOString(),
-      })),
+      data: registrations.map((r) => {
+        const scannedAt = checkinMap.get(r.id) ?? null;
+        return {
+          id: r.id,
+          studentId: r.studentId,
+          studentName: r.student?.fullName ?? '',
+          status: r.status,
+          checkedIn: scannedAt !== null,
+          checkedInAt: scannedAt ? new Date(scannedAt).toISOString() : null,
+          createdAt: r.createdAt.toISOString(),
+        };
+      }),
       meta: {
         total: registrations.length,
         confirmed,
         pending,
         cancelled,
+        checkedIn,
       },
     };
   }

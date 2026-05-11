@@ -157,4 +157,35 @@ export class CheckinService {
       status: 'synced',
     };
   }
+
+  // ──────────────────────────────────────────────────────────
+  // Get workshop check-ins (ORGANIZER)
+  // ──────────────────────────────────────────────────────────
+
+  async getWorkshopCheckins(workshopId: string) {
+    const checkins = await this.checkinRepo
+      .createQueryBuilder('ci')
+      .innerJoinAndSelect('ci.registration', 'r')
+      .innerJoinAndSelect('r.student', 'student')
+      .leftJoinAndSelect('ci.scanner', 'scanner')
+      .where('r.workshop_id = :workshopId', { workshopId })
+      .orderBy('ci.scanned_at', 'ASC')
+      .getMany();
+
+    return {
+      data: checkins.map((ci) => ({
+        id: ci.id,
+        registrationId: ci.registrationId,
+        studentId: ci.registration.studentId,
+        studentName: ci.registration.student?.fullName ?? '',
+        scannedAt: ci.scannedAt.toISOString(),
+        scannedBy: ci.scannedBy,
+        scannerName: ci.scanner?.fullName ?? null,
+        source: ci.source,
+      })),
+      meta: {
+        total: checkins.length,
+      },
+    };
+  }
 }
