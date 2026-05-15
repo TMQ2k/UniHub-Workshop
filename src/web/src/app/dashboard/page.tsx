@@ -131,12 +131,11 @@ export default function DashboardPage() {
 
       {/* Payment Stats */}
       {paymentStats && (
-        <div className="mb-8 grid gap-4 sm:grid-cols-4">
+        <div className="mb-8 grid gap-4 sm:grid-cols-3">
           {[
             { label: 'Tổng doanh thu', value: `${paymentStats.totalRevenue.toLocaleString('vi-VN')}đ`, icon: '💰' },
             { label: 'Giao dịch', value: paymentStats.totalTransactions, icon: '📊' },
             { label: 'Thành công', value: paymentStats.completedPayments, icon: '✅' },
-            { label: 'Hoàn tiền', value: paymentStats.refundedPayments, icon: '↩️' },
           ].map((stat) => (
             <div
               key={stat.label}

@@ -17,21 +17,14 @@ export interface PaymentResult {
   message?: string;
 }
 
-/**
- * Result returned by the payment provider after refund.
- */
-export interface RefundResult {
-  success: boolean;
-  refundId: string;
-  message?: string;
-}
+
 
 /**
  * Payment status returned by the provider.
  */
 export interface PaymentStatusResult {
   transactionId: string;
-  status: 'COMPLETED' | 'PROCESSING' | 'FAILED' | 'REFUNDED';
+  status: 'COMPLETED' | 'PROCESSING' | 'FAILED';
 }
 
 /**
@@ -45,7 +38,6 @@ export interface PaymentStatusResult {
  */
 export interface IPaymentProvider {
   processPayment(amount: number, metadata: PaymentMetadata): Promise<PaymentResult>;
-  refund(transactionId: string, amount: number): Promise<RefundResult>;
   getStatus(transactionId: string): Promise<PaymentStatusResult>;
 }
 

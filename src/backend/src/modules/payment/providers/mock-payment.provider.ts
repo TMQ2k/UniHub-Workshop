@@ -3,7 +3,6 @@ import {
   IPaymentProvider,
   PaymentMetadata,
   PaymentResult,
-  RefundResult,
   PaymentStatusResult,
 } from '../interfaces/index.js';
 
@@ -35,17 +34,7 @@ export class MockPaymentProvider implements IPaymentProvider {
     };
   }
 
-  async refund(transactionId: string, amount: number): Promise<RefundResult> {
-    this.logger.log(`[MOCK] Refunding ${amount} VND for transaction ${transactionId}`);
 
-    await this.delay(50);
-
-    return {
-      success: true,
-      refundId: `mock_refund_${Date.now()}`,
-      message: 'Mock refund processed successfully.',
-    };
-  }
 
   async getStatus(transactionId: string): Promise<PaymentStatusResult> {
     this.logger.log(`[MOCK] Getting status for transaction ${transactionId}`);

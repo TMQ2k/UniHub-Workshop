@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS payments (
     amount              INT NOT NULL,
     currency            VARCHAR(10) NOT NULL DEFAULT 'VND',
     status              VARCHAR(20) NOT NULL DEFAULT 'PROCESSING'
-                        CHECK (status IN ('PROCESSING', 'COMPLETED', 'FAILED', 'REFUNDED')),
+                        CHECK (status IN ('PROCESSING', 'COMPLETED', 'FAILED')),
     transaction_id      VARCHAR(255),
     idempotency_key     VARCHAR(255) UNIQUE NOT NULL,
     paid_at             TIMESTAMP WITH TIME ZONE,
@@ -188,3 +188,130 @@ VALUES
         TRUE
     )
 ON CONFLICT (email) DO NOTHING;
+
+-- ============================================================
+-- SEED DATA — Workshops (Tuần lễ kỹ năng và nghề nghiệp)
+-- Mix of: PUBLISHED (free + paid), DRAFT, CANCELLED
+-- Dates use NOW() + interval so they stay in the future
+-- ============================================================
+
+DO $$
+DECLARE
+    admin_id UUID;
+BEGIN
+    -- Get admin user ID for created_by
+    SELECT id INTO admin_id FROM users WHERE student_id = 'ADMIN001' LIMIT 1;
+
+    -- Workshop 1: Free, PUBLISHED — Ngày 1 sáng
+    INSERT INTO workshops (id, title, description, speaker, room, room_map_url, start_time, end_time, max_seats, available_seats, price, status, created_by)
+    VALUES (
+        uuid_generate_v4(),
+        'Kỹ năng viết CV chuyên nghiệp',
+        'Hướng dẫn sinh viên cách xây dựng một bản CV nổi bật, phù hợp với từng vị trí ứng tuyển. Bao gồm phân tích các mẫu CV thực tế từ các ứng viên đã trúng tuyển tại Google, VNG và FPT Software.',
+        'TS. Nguyễn Thanh Tùng',
+        'Hội trường A - Tầng 3',
+        'https://maps.app.goo.gl/example1',
+        NOW() + INTERVAL '3 days' + INTERVAL '8 hours',
+        NOW() + INTERVAL '3 days' + INTERVAL '10 hours',
+        60, 60, 0, 'PUBLISHED', admin_id
+    ) ON CONFLICT DO NOTHING;
+
+    -- Workshop 2: Free, PUBLISHED — Ngày 1 chiều
+    INSERT INTO workshops (id, title, description, speaker, room, room_map_url, start_time, end_time, max_seats, available_seats, price, status, created_by)
+    VALUES (
+        uuid_generate_v4(),
+        'Phỏng vấn kỹ thuật: Từ LeetCode đến thực chiến',
+        'Workshop thực hành giải thuật và cấu trúc dữ liệu, mô phỏng phỏng vấn kỹ thuật tại các công ty công nghệ hàng đầu. Sinh viên sẽ được thực hành mock interview với mentor từ Shopee.',
+        'Kỹ sư Lê Hoàng Phúc (Shopee)',
+        'Phòng Lab B2-305',
+        'https://maps.app.goo.gl/example2',
+        NOW() + INTERVAL '3 days' + INTERVAL '13 hours',
+        NOW() + INTERVAL '3 days' + INTERVAL '15 hours' + INTERVAL '30 minutes',
+        40, 40, 0, 'PUBLISHED', admin_id
+    ) ON CONFLICT DO NOTHING;
+
+    -- Workshop 3: Paid, PUBLISHED — Ngày 2 sáng
+    INSERT INTO workshops (id, title, description, speaker, room, room_map_url, start_time, end_time, max_seats, available_seats, price, status, created_by)
+    VALUES (
+        uuid_generate_v4(),
+        'Xây dựng Portfolio với React & Next.js',
+        'Hands-on workshop xây dựng trang portfolio cá nhân bằng React và Next.js từ đầu. Bao gồm: thiết kế UI/UX, deploy lên Vercel, tối ưu SEO. Mỗi sinh viên ra về với 1 portfolio hoàn chỉnh.',
+        'ThS. Phạm Minh Đức (Freelancer)',
+        'Phòng Lab C1-201',
+        'https://maps.app.goo.gl/example3',
+        NOW() + INTERVAL '4 days' + INTERVAL '8 hours' + INTERVAL '30 minutes',
+        NOW() + INTERVAL '4 days' + INTERVAL '11 hours' + INTERVAL '30 minutes',
+        35, 35, 50000, 'PUBLISHED', admin_id
+    ) ON CONFLICT DO NOTHING;
+
+    -- Workshop 4: Paid, PUBLISHED — Ngày 2 chiều
+    INSERT INTO workshops (id, title, description, speaker, room, room_map_url, start_time, end_time, max_seats, available_seats, price, status, created_by)
+    VALUES (
+        uuid_generate_v4(),
+        'Nhập môn Cloud Computing với AWS',
+        'Giới thiệu các dịch vụ AWS phổ biến (EC2, S3, Lambda, RDS). Thực hành deploy một ứng dụng web lên AWS bằng tài khoản AWS Academy. Phí bao gồm tài liệu in và voucher AWS $25.',
+        'Kỹ sư Trần Văn Khoa (AWS Solutions Architect)',
+        'Hội trường B - Tầng 2',
+        'https://maps.app.goo.gl/example4',
+        NOW() + INTERVAL '4 days' + INTERVAL '14 hours',
+        NOW() + INTERVAL '4 days' + INTERVAL '17 hours',
+        50, 50, 100000, 'PUBLISHED', admin_id
+    ) ON CONFLICT DO NOTHING;
+
+    -- Workshop 5: Free, PUBLISHED — Ngày 3 sáng
+    INSERT INTO workshops (id, title, description, speaker, room, room_map_url, start_time, end_time, max_seats, available_seats, price, status, created_by)
+    VALUES (
+        uuid_generate_v4(),
+        'Soft Skills: Thuyết trình & Giao tiếp hiệu quả',
+        'Rèn luyện kỹ năng thuyết trình trước đám đông, giao tiếp trong môi trường doanh nghiệp. Bao gồm bài tập thực hành storytelling và nhận feedback trực tiếp từ diễn giả.',
+        'Chuyên gia Nguyễn Phi Vân',
+        'Phòng Seminar D1-101',
+        'https://maps.app.goo.gl/example5',
+        NOW() + INTERVAL '5 days' + INTERVAL '9 hours',
+        NOW() + INTERVAL '5 days' + INTERVAL '11 hours',
+        80, 80, 0, 'PUBLISHED', admin_id
+    ) ON CONFLICT DO NOTHING;
+
+    -- Workshop 6: Free, PUBLISHED — Ngày 3 chiều
+    INSERT INTO workshops (id, title, description, speaker, room, room_map_url, start_time, end_time, max_seats, available_seats, price, status, created_by)
+    VALUES (
+        uuid_generate_v4(),
+        'AI & Machine Learning: Ứng dụng thực tế trong doanh nghiệp',
+        'Tổng quan về cách các doanh nghiệp Việt Nam đang ứng dụng AI/ML vào sản phẩm. Demo live các use-case: chatbot hỗ trợ khách hàng, hệ thống recommendation, xử lý ảnh y tế.',
+        'PGS.TS. Lê Đình Duy (VinAI)',
+        'Hội trường A - Tầng 3',
+        'https://maps.app.goo.gl/example6',
+        NOW() + INTERVAL '5 days' + INTERVAL '14 hours',
+        NOW() + INTERVAL '5 days' + INTERVAL '16 hours' + INTERVAL '30 minutes',
+        100, 100, 0, 'PUBLISHED', admin_id
+    ) ON CONFLICT DO NOTHING;
+
+    -- Workshop 7: DRAFT (chưa publish) — Ngày 4
+    INSERT INTO workshops (id, title, description, speaker, room, room_map_url, start_time, end_time, max_seats, available_seats, price, status, created_by)
+    VALUES (
+        uuid_generate_v4(),
+        'DevOps & CI/CD Pipeline cho người mới bắt đầu',
+        'Giới thiệu Docker, GitHub Actions, và quy trình CI/CD. Workshop này đang trong quá trình chuẩn bị nội dung.',
+        'Đang cập nhật',
+        'Chưa xếp phòng',
+        NULL,
+        NOW() + INTERVAL '6 days' + INTERVAL '8 hours',
+        NOW() + INTERVAL '6 days' + INTERVAL '10 hours',
+        45, 45, 0, 'DRAFT', admin_id
+    ) ON CONFLICT DO NOTHING;
+
+    -- Workshop 8: CANCELLED — Ngày 5
+    INSERT INTO workshops (id, title, description, speaker, room, room_map_url, start_time, end_time, max_seats, available_seats, price, status, created_by)
+    VALUES (
+        uuid_generate_v4(),
+        'Blockchain & Web3: Cơ hội nghề nghiệp 2026',
+        'Workshop đã bị hủy do diễn giả có lịch trình đột xuất. Ban tổ chức xin lỗi vì sự bất tiện này.',
+        'Kỹ sư Hoàng Minh Trí (Axie Infinity)',
+        'Phòng Lab B2-305',
+        'https://maps.app.goo.gl/example8',
+        NOW() + INTERVAL '7 days' + INTERVAL '14 hours',
+        NOW() + INTERVAL '7 days' + INTERVAL '16 hours',
+        30, 30, 75000, 'CANCELLED', admin_id
+    ) ON CONFLICT DO NOTHING;
+
+END $$;

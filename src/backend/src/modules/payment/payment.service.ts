@@ -243,13 +243,11 @@ export class PaymentService {
       .reduce((sum, p) => sum + p.amount, 0);
 
     const completedPayments = payments.filter((p) => p.status === PaymentStatus.COMPLETED).length;
-    const refundedPayments = payments.filter((p) => p.status === PaymentStatus.REFUNDED).length;
 
     return {
       totalRevenue,
       totalTransactions: payments.length,
       completedPayments,
-      refundedPayments,
     };
   }
 

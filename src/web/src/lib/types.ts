@@ -71,7 +71,7 @@ export interface Payment {
   registrationId: string;
   amount: number;
   currency: string;
-  status: 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
+  status: 'PROCESSING' | 'COMPLETED' | 'FAILED';
   transactionId: string;
   paidAt: string;
 }
@@ -80,7 +80,6 @@ export interface PaymentStats {
   totalRevenue: number;
   totalTransactions: number;
   completedPayments: number;
-  refundedPayments: number;
 }
 
 export interface RegistrationStats {

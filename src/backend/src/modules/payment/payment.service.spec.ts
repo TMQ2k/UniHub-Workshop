@@ -98,7 +98,6 @@ describe('PaymentService', () => {
               success: true,
               transactionId: 'txn_123',
             }),
-            refund: jest.fn().mockResolvedValue({ success: true, refundId: 'ref_1' }),
             getStatus: jest.fn().mockResolvedValue({ transactionId: 'txn_123', status: 'COMPLETED' }),
           },
         },
@@ -290,16 +289,14 @@ describe('PaymentService', () => {
       paymentRepo.find = jest.fn().mockResolvedValue([
         { ...mockPayment, status: PaymentStatus.COMPLETED, amount: 50000 },
         { ...mockPayment, status: PaymentStatus.COMPLETED, amount: 100000 },
-        { ...mockPayment, status: PaymentStatus.REFUNDED, amount: 50000 },
         { ...mockPayment, status: PaymentStatus.FAILED, amount: 50000 },
       ]);
 
       const stats = await service.getPaymentStats();
 
       expect(stats.totalRevenue).toBe(150000);
-      expect(stats.totalTransactions).toBe(4);
+      expect(stats.totalTransactions).toBe(3);
       expect(stats.completedPayments).toBe(2);
-      expect(stats.refundedPayments).toBe(1);
     });
   });
 });
