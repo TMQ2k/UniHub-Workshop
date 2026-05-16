@@ -53,14 +53,7 @@
 
 ## Hướng dẫn cài đặt & khởi chạy
 
-### Bước 1 — Clone repository
-
-```bash
-git clone <repository-url>
-cd UniHub-Workshop
-```
-
-### Bước 2 — Khởi động Infrastructure (PostgreSQL + Redis)
+### Bước 1 — Khởi động Infrastructure (PostgreSQL + Redis)
 
 ```bash
 cd infra
@@ -82,7 +75,7 @@ docker ps
 > docker compose --env-file .env up -d
 > ```
 
-### Bước 3 — Cấu hình biến môi trường Backend
+### Bước 2 — Cấu hình biến môi trường Backend
 
 ```bash
 cd ../src/backend
@@ -122,7 +115,7 @@ QR_HMAC_SECRET=dev_qr_hmac_secret_unihub_2026
 GEMINI_API_KEY=
 ```
 
-### Bước 4 — Cài đặt dependencies & khởi chạy Backend
+### Bước 3 — Cài đặt dependencies & khởi chạy Backend
 
 ```bash
 # Đang ở thư mục src/backend
@@ -136,7 +129,7 @@ npm run start:dev
 🚀 UniHub Workshop API running on http://localhost:3000/api
 ```
 
-### Bước 5 — Cấu hình & khởi chạy Web Frontend
+### Bước 4 — Cấu hình & khởi chạy Web Frontend
 
 Mở terminal mới:
 
@@ -154,7 +147,7 @@ npm run dev
 - Local: http://localhost:3001
 ```
 
-### Bước 6 — Khởi chạy Mobile App (Expo — Check-in QR)
+### Bước 5 — Khởi chạy Mobile App (Expo — Check-in QR)
 
 > **Lưu ý:** Mobile app dành cho **CHECKIN_STAFF** quét QR tại sự kiện. Không bắt buộc cho việc demo web.
 
@@ -177,12 +170,12 @@ Metro waiting on exp://192.168.x.x:8081
 
 #### Cách truy cập Mobile App
 
-| Phương thức | Hướng dẫn |
-| ----------- | --------- |
-| **Trình duyệt (Web)** | Nhấn `w` trong terminal Expo → mở tại http://localhost:8081 |
-| **Điện thoại thật** | Cài **Expo Go** từ App Store / Google Play → quét QR code hiển thị trong terminal |
-| **Android Emulator** | Nhấn `a` trong terminal Expo (cần Android Studio + AVD đã cài sẵn) |
-| **iOS Simulator** | Nhấn `i` trong terminal Expo (chỉ macOS, cần Xcode) |
+| Phương thức           | Hướng dẫn                                                                         |
+| --------------------- | --------------------------------------------------------------------------------- |
+| **Trình duyệt (Web)** | Nhấn `w` trong terminal Expo → mở tại http://localhost:8081                       |
+| **Điện thoại thật**   | Cài **Expo Go** từ App Store / Google Play → quét QR code hiển thị trong terminal |
+| **Android Emulator**  | Nhấn `a` trong terminal Expo (cần Android Studio + AVD đã cài sẵn)                |
+| **iOS Simulator**     | Nhấn `i` trong terminal Expo (chỉ macOS, cần Xcode)                               |
 
 #### Thao tác trên Mobile App
 
@@ -195,14 +188,14 @@ Metro waiting on exp://192.168.x.x:8081
 
 > **Lưu ý camera:** Khi chạy trên trình duyệt (`w`), camera QR sẽ dùng webcam. Trên điện thoại thật qua Expo Go sẽ sử dụng camera sau.
 
-### Bước 7 — Truy cập hệ thống
+### Bước 6 — Truy cập hệ thống
 
 | Ứng dụng             | URL                                               |
 | -------------------- | ------------------------------------------------- |
-| **Web Frontend**     | http://localhost:3001                              |
-| **Backend API**      | http://localhost:3000/api                          |
-| **Mobile App (Web)** | http://localhost:8081 (nhấn `w` từ Expo terminal)  |
-| **API Health Check** | http://localhost:3000/api (trả về `Hello World!`)  |
+| **Web Frontend**     | http://localhost:3001                             |
+| **Backend API**      | http://localhost:3000/api                         |
+| **Mobile App (Web)** | http://localhost:8081 (nhấn `w` từ Expo terminal) |
+| **API Health Check** | http://localhost:3000/api (trả về `Hello World!`) |
 
 ---
 
@@ -210,11 +203,11 @@ Metro waiting on exp://192.168.x.x:8081
 
 Tất cả tài khoản dưới đây sử dụng chung mật khẩu: **`Admin@123`**
 
-| Vai trò               | Mã SV (studentId) | Email                  | Tên              |
-| --------------------- | ----------------- | ---------------------- | ---------------- |
-| **ORGANIZER** (Admin) | `ADMIN001`        | admin@unihub.edu.vn    | Nguyen Van Admin |
-| **CHECKIN_STAFF**     | `STAFF001`        | staff@unihub.edu.vn    | Tran Thi Staff   |
-| **STUDENT**           | `SV001`           | sinhvien@unihub.edu.vn | Le Van Sinh Vien |
+| Vai trò               | Mã SV (studentId) | Email                  | Tên              | Password     |
+| --------------------- | ----------------- | ---------------------- | ---------------- | ------------ |
+| **ORGANIZER** (Admin) | `ADMIN001`        | admin@unihub.edu.vn    | Nguyen Van Admin | Admin@123    |
+| **CHECKIN_STAFF**     | `STAFF001`        | staff@unihub.edu.vn    | Tran Thi Staff   | Admin@123    |
+| **STUDENT**           | `SV001`           | sinhvien@unihub.edu.vn | Le Van Sinh Vien | SV001@unihub |
 
 ### Đăng nhập API (cURL)
 
