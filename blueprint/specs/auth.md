@@ -100,14 +100,14 @@ Module xác thực và phân quyền cho toàn bộ hệ thống UniHub Workshop
 
 ## Tiêu chí chấp nhận
 
-- [x] Tài khoản sinh viên được tạo tự động qua CSV Sync (không có đăng ký thủ công).
-- [x] Sinh viên đăng nhập thành công bằng MSSV + mật khẩu mặc định `{MSSV}@unihub`.
-- [x] Refresh token flow hoạt động đúng: token cũ bị revoke (rotation), token mới được cấp.
-- [x] Endpoint có decorator `@Roles('ORGANIZER')` từ chối request của STUDENT với 403.
-- [x] Tài khoản bị khóa (`isLocked = true`) → từ chối đăng nhập.
-- [x] Logout revoke refresh token (set hash = null), không thể dùng lại.
-- [x] `GET /auth/me` trả thông tin profile của user đang đăng nhập.
-- [x] Giao diện đăng nhập hiển thị hướng dẫn mật khẩu mặc định và thông báo tài khoản được đồng bộ từ hệ thống trường.
+- [ ] Tài khoản sinh viên được tạo tự động qua CSV Sync (không có đăng ký thủ công).
+- [ ] Sinh viên đăng nhập thành công bằng MSSV + mật khẩu mặc định `{MSSV}@unihub`.
+- [ ] Refresh token flow hoạt động đúng: token cũ bị revoke (rotation), token mới được cấp.
+- [ ] Endpoint có decorator `@Roles('ORGANIZER')` từ chối request của STUDENT với 403.
+- [ ] Tài khoản bị khóa (`isLocked = true`) → từ chối đăng nhập.
+- [ ] Logout revoke refresh token (set hash = null), không thể dùng lại.
+- [ ] `GET /auth/me` trả thông tin profile của user đang đăng nhập.
+- [ ] Giao diện đăng nhập hiển thị hướng dẫn mật khẩu mặc định và thông báo tài khoản được đồng bộ từ hệ thống trường.
 
 ## API Contract
 

@@ -64,7 +64,7 @@ Module cho phép ban tổ chức upload file **PDF** giới thiệu workshop. H�
 
 - **Bất đồng bộ**: PDF processing qua BullMQ, không block request.
 - **File size**: Tối đa **10MB** per PDF.
-- **AI Model**: Google Gemini API (`gemini-2.0-flash`) — gọi qua `@google/generative-ai` SDK.
+- **AI Model**: Google Gemini API (`gemini-2.5-flash`) — gọi qua `@google/generative-ai` SDK.
 - **Summary length**: Tối đa **500 từ**.
 - **Ngôn ngữ**: Summary sinh ra bằng **tiếng Việt**.
 - **Rate limit**: Tối đa **10 AI requests/phút** (tránh vượt API quota).

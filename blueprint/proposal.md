@@ -39,7 +39,7 @@ Xây dựng hệ thống **UniHub Workshop** để số hóa toàn bộ quy trì
 ### Sinh viên (~12.000 người)
 
 - Đăng nhập bằng MSSV + mật khẩu (tài khoản được đồng bộ từ hệ thống trường, mật khẩu mặc định `{MSSV}@unihub`)
-- Xem danh sách tất cả workshop: thông tin diễn giả, phòng, sơ đồ, **số chỗ còn lại theo thời gian thực**
+- Xem danh sách tất cả workshop: thông tin diễn giả, phòng, **số chỗ còn lại theo thời gian thực**
 - Đăng ký tham dự (miễn phí hoặc có phí)
 - Nhận **mã QR** sau đăng ký thành công để check-in
 - Nhận thông báo xác nhận qua app và email
