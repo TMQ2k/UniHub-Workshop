@@ -53,7 +53,13 @@
 
 ## Hướng dẫn cài đặt & khởi chạy
 
-### Bước 1 — Khởi động Infrastructure (PostgreSQL + Redis)
+### Bước 1 - Clone repo
+
+```bash
+git clone https://github.com/TMQ2k/UniHub-Workshop.git
+```
+
+### Bước 2 - Khởi động Infrastructure (PostgreSQL + Redis)
 
 ```bash
 cd infra
@@ -75,7 +81,7 @@ docker ps
 > docker compose --env-file .env up -d
 > ```
 
-### Bước 2 — Cấu hình biến môi trường Backend
+### Bước 3 — Cấu hình biến môi trường Backend
 
 ```bash
 cd ../src/backend
@@ -115,7 +121,7 @@ QR_HMAC_SECRET=dev_qr_hmac_secret_unihub_2026
 GEMINI_API_KEY=
 ```
 
-### Bước 3 — Cài đặt dependencies & khởi chạy Backend
+### Bước 4 — Cài đặt dependencies & khởi chạy Backend
 
 ```bash
 # Đang ở thư mục src/backend
@@ -129,7 +135,7 @@ npm run start:dev
 🚀 UniHub Workshop API running on http://localhost:3000/api
 ```
 
-### Bước 4 — Cấu hình & khởi chạy Web Frontend
+### Bước 5 — Cấu hình & khởi chạy Web Frontend
 
 Mở terminal mới:
 
@@ -147,9 +153,19 @@ npm run dev
 - Local: http://localhost:3001
 ```
 
-### Bước 5 — Khởi chạy Mobile App (Expo — Check-in QR)
+### Bước 6 — Khởi chạy Mobile App (Expo — Check-in QR)
 
 > **Lưu ý:** Mobile app dành cho **CHECKIN_STAFF** quét QR tại sự kiện. Không bắt buộc cho việc demo web.
+
+Truy cập vào folder src/mobile. Chỉnh sửa API_BASE_URL trong file `src/constants/index.ts` theo IP của bạn.
+
+Kiểm tra IP của bạn:
+
+```bash
+ipconfig
+```
+
+Tìm dòng IPV4 Address. Ví dụ: `192.168.x.x` và thay vào API_BASE_URL trong file `src/constants/index.ts`
 
 Mở terminal mới:
 
@@ -188,7 +204,7 @@ Metro waiting on exp://192.168.x.x:8081
 
 > **Lưu ý camera:** Khi chạy trên trình duyệt (`w`), camera QR sẽ dùng webcam. Trên điện thoại thật qua Expo Go sẽ sử dụng camera sau.
 
-### Bước 6 — Truy cập hệ thống
+### Bước 7 — Truy cập hệ thống
 
 | Ứng dụng             | URL                                               |
 | -------------------- | ------------------------------------------------- |
@@ -200,8 +216,6 @@ Metro waiting on exp://192.168.x.x:8081
 ---
 
 ## Tài khoản test
-
-Tất cả tài khoản dưới đây sử dụng chung mật khẩu: **`Admin@123`**
 
 | Vai trò               | Mã SV (studentId) | Email                  | Tên              | Password     |
 | --------------------- | ----------------- | ---------------------- | ---------------- | ------------ |
